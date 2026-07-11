@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const MBBank = require('@doa69/mbbank');
+const { MB } = require('mbbank');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,41 +18,36 @@ const authenticateApiKey = (req, res, next) => {
     next();
 };
 
-let mbbank = null;
-let sessionData = null;
+let mb = null;
 let lastLoginAt = 0;
 
-async function initializeMBBank() {
-    try {
-        if (!process.env.MBBANK_USERNAME || !process.env.MBBANK_PASSWORD) {
-            console.warn('MBBank credentials missing (MBBANK_USERNAME / MBBANK_PASSWORD)');
-            return false;
-        }
-        mbbank = new MBBank({
-            username: process.env.MBBANK_USERNAME,
-            password: process.env.MBBANK_PASSWORD,
-        });
-        console.log('MBBank instance created');
-        return true;
-    } catch (error) {
-        console.error('Failed to initialize MBBank:', error.message);
-        return false;
+function createClient() {
+    if (!process.env.MBBANK_USERNAME || !process.env.MBBANK_PASSWORD) {
+        console.warn('MBBank credentials missing (MBBANK_USERNAME / MBBANK_PASSWORD)');
+        return null;
     }
+    // CookieGMVN/mbbank API
+    return new MB({
+        username: process.env.MBBANK_USERNAME,
+        password: process.env.MBBANK_PASSWORD,
+        preferredOCRMethod: process.env.MBBANK_OCR || 'default',
+        saveWasm: true,
+    });
+}
+
+async function ensureClient() {
+    if (!mb) mb = createClient();
+    return mb;
 }
 
 async function loginMBBank() {
     try {
-        if (!mbbank) {
-            const ok = await initializeMBBank();
-            if (!ok) return { success: false, message: 'Init failed' };
-        }
-        sessionData = await mbbank.login();
+        const client = await ensureClient();
+        if (!client) return { success: false, message: 'Init failed — missing credentials' };
+        await client.login();
         lastLoginAt = Date.now();
-        if (sessionData && typeof sessionData === 'object') {
-            sessionData.timestamp = lastLoginAt;
-        }
         console.log('MBBank login successful');
-        return { success: true, message: 'Login successful', data: sessionData };
+        return { success: true, message: 'Login successful' };
     } catch (error) {
         console.error('MBBank login failed:', error.message);
         return { success: false, message: error.message };
@@ -61,14 +56,15 @@ async function loginMBBank() {
 
 function isSessionExpired() {
     if (!lastLoginAt) return true;
-    const SESSION_DURATION = 8 * 60 * 1000;
-    return Date.now() - lastLoginAt > SESSION_DURATION;
+    // re-login every ~8 minutes
+    return Date.now() - lastLoginAt > 8 * 60 * 1000;
 }
 
 async function ensureValidSession() {
-    if (!sessionData || isSessionExpired()) {
+    if (!mb || isSessionExpired()) {
         console.log('Session expired or missing, logging in...');
-        await loginMBBank();
+        const r = await loginMBBank();
+        if (!r.success) throw new Error(r.message || 'login failed');
     }
 }
 
@@ -81,32 +77,48 @@ function formatDate(date) {
 
 function normalizeTx(tx) {
     if (!tx || typeof tx !== 'object') return null;
-    const credit = Number(tx.creditAmount ?? tx.amount ?? 0) || 0;
+    // mbbank lib fields vary slightly across versions
+    const credit = Number(
+        tx.creditAmount ?? tx.amount ?? tx.credit ?? 0
+    ) || 0;
+    const debit = Number(tx.debitAmount ?? tx.debit ?? 0) || 0;
+    const amount = credit > 0 ? credit : (debit > 0 ? -debit : Number(tx.amount) || 0);
     return {
-        creditAmount: credit,
-        amount: credit,
-        description: tx.description || tx.transactionDesc || '',
-        transactionDate: tx.transactionDate || tx.bookingDate || '',
-        refNo: tx.refNo || tx.transactionId || tx.ftCode || '',
+        creditAmount: credit > 0 ? credit : (amount > 0 ? amount : 0),
+        amount: credit > 0 ? credit : amount,
+        description: tx.description || tx.transactionDesc || tx.addDescription || '',
+        transactionDate: tx.transactionDate || tx.bookingDate || tx.postingDate || '',
+        refNo: tx.refNo || tx.transactionId || tx.ftCode || tx.ref || '',
         accountNo: tx.accountNo || process.env.MBBANK_ACCOUNT_NUMBER || '',
-        benAccountName: tx.benAccountName || tx.senderName || '',
-        senderName: tx.senderName || tx.benAccountName || '',
+        benAccountName: tx.benAccountName || tx.senderName || tx.counterpartName || '',
+        senderName: tx.senderName || tx.benAccountName || tx.counterpartName || '',
     };
+}
+
+function extractTxList(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw.transactionHistoryList)) return raw.transactionHistoryList;
+    if (Array.isArray(raw.transactions)) return raw.transactions;
+    if (Array.isArray(raw.data)) return raw.data;
+    if (raw.data && Array.isArray(raw.data.transactionHistoryList)) return raw.data.transactionHistoryList;
+    return [];
 }
 
 app.get('/health', (req, res) => {
     res.json({
         success: true,
         message: 'MBBank service is running',
-        sessionActive: sessionData !== null && !isSessionExpired(),
+        sessionActive: Boolean(mb) && !isSessionExpired(),
         accountConfigured: Boolean(process.env.MBBANK_ACCOUNT_NUMBER),
+        lib: 'mbbank (CookieGMVN)',
     });
 });
 
 app.post('/api/login', authenticateApiKey, async (req, res) => {
     try {
         const result = await loginMBBank();
-        res.json(result);
+        res.status(result.success ? 200 : 500).json(result);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -119,18 +131,41 @@ app.get('/api/balance', authenticateApiKey, async (req, res) => {
         if (!accountNumber) {
             return res.status(400).json({ success: false, message: 'MBBANK_ACCOUNT_NUMBER not set' });
         }
-        const balance = await mbbank.getBalance(accountNumber);
+        // getBalance may return all accounts or one account depending on version
+        let balance;
+        try {
+            balance = await mb.getBalance(accountNumber);
+        } catch {
+            balance = await mb.getBalance();
+        }
+        // Normalize
+        let available = balance?.availableBalance ?? balance?.balance;
+        let accountName = balance?.accountName || process.env.MBBANK_ACCOUNT_NAME || '';
+        if (Array.isArray(balance)) {
+            const hit = balance.find(a => String(a.accountNumber || a.acctNo) === String(accountNumber)) || balance[0];
+            available = hit?.availableBalance ?? hit?.balance ?? available;
+            accountName = hit?.accountName || accountName;
+        } else if (balance?.balances || balance?.accountList) {
+            const list = balance.balances || balance.accountList;
+            const hit = (list || []).find(a => String(a.accountNumber || a.acctNo) === String(accountNumber));
+            if (hit) {
+                available = hit.availableBalance ?? hit.balance;
+                accountName = hit.accountName || accountName;
+            }
+        }
         res.json({
             success: true,
             data: {
                 accountNumber,
-                balance: balance?.availableBalance ?? balance?.balance,
-                currency: balance?.currency || 'VND',
-                accountName: balance?.accountName || process.env.MBBANK_ACCOUNT_NAME || '',
+                balance: available,
+                currency: 'VND',
+                accountName,
             },
         });
     } catch (error) {
         console.error('Get balance error:', error.message);
+        // force re-login next time
+        lastLoginAt = 0;
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -154,14 +189,13 @@ app.post('/api/transactions', authenticateApiKey, async (req, res) => {
             endDate = toDate ? new Date(toDate) : new Date();
         }
 
-        const raw = await mbbank.getTransactionHistory({
+        const raw = await mb.getTransactionsHistory({
             accountNumber,
             fromDate: formatDate(startDate),
             toDate: formatDate(endDate),
         });
 
-        const list = Array.isArray(raw) ? raw : (raw?.transactionHistoryList || raw?.transactions || []);
-        const transactions = list.map(normalizeTx).filter(Boolean);
+        const transactions = extractTxList(raw).map(normalizeTx).filter(Boolean);
 
         res.json({
             success: true,
@@ -174,6 +208,7 @@ app.post('/api/transactions', authenticateApiKey, async (req, res) => {
         });
     } catch (error) {
         console.error('Get transactions error:', error.message);
+        lastLoginAt = 0;
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -191,16 +226,14 @@ app.post('/api/check-deposits', authenticateApiKey, async (req, res) => {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - Number(days));
 
-        const raw = await mbbank.getTransactionHistory({
+        const raw = await mb.getTransactionsHistory({
             accountNumber,
             fromDate: formatDate(startDate),
             toDate: formatDate(endDate),
         });
 
-        const list = Array.isArray(raw) ? raw : (raw?.transactionHistoryList || raw?.transactions || []);
         const pat = String(pattern || '').toLowerCase();
-
-        const deposits = list
+        const deposits = extractTxList(raw)
             .map(normalizeTx)
             .filter(Boolean)
             .filter(tx => {
@@ -225,6 +258,7 @@ app.post('/api/check-deposits', authenticateApiKey, async (req, res) => {
         });
     } catch (error) {
         console.error('Check deposits error:', error.message);
+        lastLoginAt = 0;
         res.status(500).json({ success: false, message: error.message });
     }
 });
@@ -235,10 +269,9 @@ app.use((err, req, res, next) => {
 });
 
 async function startServer() {
-    await initializeMBBank();
-    // Best-effort login on boot
-    if (process.env.MBBANK_USERNAME && process.env.MBBANK_PASSWORD) {
-        await loginMBBank().catch(() => {});
+    mb = createClient();
+    if (mb) {
+        await loginMBBank().catch((e) => console.warn('Boot login:', e.message || e));
     }
 
     app.listen(PORT, HOST, () => {
