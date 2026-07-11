@@ -188,9 +188,10 @@ EOF
 generate_compose() {
     info "Generating docker-compose with resource limits (Caddy TLS + mbbank)..."
 
-    # Keep Caddyfile domain in sync
+    # Caddyfile is HTTP:80 only — Cloudflare terminates TLS (Full mode).
+    # No domain-specific sed needed (config uses :80 catch-all).
     if [ -f deployment/Caddyfile ]; then
-        sed -i "s/bot.minhvuong.io.vn/${C2_DOMAIN}/g" deployment/Caddyfile 2>/dev/null || true
+        ok "Caddyfile OK (HTTP:80 → api:8000, Cloudflare terminates TLS)"
     fi
 
     cat > deployment/docker-compose.yml << EOF
@@ -244,6 +245,12 @@ services:
       HOST: 0.0.0.0
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   api:
     build: ../backend
@@ -276,8 +283,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      mbbank:
-        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     deploy:
       resources:
         limits:
@@ -289,14 +300,13 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
 volumes:
   pgdata:
@@ -331,13 +341,13 @@ verify() {
 
     info "Containers: ${RUNNING}/${TOTAL} running"
 
-    # Check API via Caddy or direct
-    if curl -sk https://localhost/health 2>/dev/null | grep -q "ok"; then
-        ok "API health (HTTPS): PASS"
-    elif curl -s http://localhost/health 2>/dev/null | grep -q "ok"; then
-        ok "API health (HTTP): PASS"
+    # Check API via Caddy (HTTP:80 — Cloudflare handles TLS)
+    if curl -s http://localhost/health 2>/dev/null | grep -q "ok"; then
+        ok "API health (Caddy:80): PASS"
+    elif curl -s http://localhost:8000/health 2>/dev/null | grep -q "ok"; then
+        ok "API health (direct:8000): PASS"
     else
-        warn "API health check: waiting... (Caddy may need 10-30s + TLS cert)"
+        warn "API health check: waiting... (api may need 10-30s to start)"
     fi
 
     # Check DB

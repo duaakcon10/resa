@@ -82,8 +82,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      mbbank:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
       interval: 15s
@@ -96,16 +94,14 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-      - "443:443"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
       api:
-        condition: service_started
-    # Edit deployment/Caddyfile domain if not bot.minhvuong.io.vn
+        condition: service_healthy
+    # Cloudflare terminates TLS; Caddy serves HTTP:80 → api:8000
 
 
 volumes:

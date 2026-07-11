@@ -2,7 +2,7 @@
 	admin off
 }
 
-bot.minhvuong.io.vn {
+:80 {
 	encode gzip
 
 	# Bot WebSocket — long-lived connections
@@ -40,9 +40,6 @@ bot.minhvuong.io.vn {
 
 	header {
 		X-Content-Type-Options nosniff
-		X-Frame-Options DENY
-		Referrer-Policy no-referrer
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		-Server
 	}
 
@@ -53,8 +50,4 @@ bot.minhvuong.io.vn {
 		}
 		format json
 	}
-}
-
-http://bot.minhvuong.io.vn {
-	redir https://{host}{uri} permanent
 }
