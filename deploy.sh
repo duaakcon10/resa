@@ -129,6 +129,9 @@ configure() {
     info "MB Bank Auto-Payment (optional — gõ ENTER để bỏ qua)"
     ask "MB Username (số điện thoại)"; read -r MB_USERNAME < /dev/tty
     ask "MB Password"; read -rs MB_PASSWORD < /dev/tty; echo ""
+    ask "MB Account Number (STK nhận tiền)"; read -r MB_ACCOUNT_NUMBER < /dev/tty
+    ask "MB Account Name (tên chủ TK)"; read -r MB_ACCOUNT_NAME < /dev/tty
+    MB_SERVICE_API_KEY=$(openssl rand -hex 16 2>/dev/null || echo "c2-mb-internal-key")
 
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -154,7 +157,7 @@ JWT_EXPIRE_MINUTES=60
 
 # ── Server ──────────────────────────────────────
 C2_HOST=0.0.0.0
-C2_PORT=443
+C2_PORT=8000
 C2_DOMAIN=${C2_DOMAIN}
 DASHBOARD_URL=${DASHBOARD_URL}
 
@@ -169,6 +172,10 @@ STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
 # ── MB Bank ─────────────────────────────────────
 MB_USERNAME=${MB_USERNAME}
 MB_PASSWORD=${MB_PASSWORD}
+MB_ACCOUNT_NUMBER=${MB_ACCOUNT_NUMBER}
+MB_ACCOUNT_NAME=${MB_ACCOUNT_NAME}
+MB_SERVICE_URL=http://mbbank:3000
+MB_SERVICE_API_KEY=${MB_SERVICE_API_KEY:-c2-mb-internal-key}
 
 # ── Logging ─────────────────────────────────────
 LOG_LEVEL=INFO
@@ -179,7 +186,12 @@ EOF
 
 # ── Step 5: Generate docker-compose với resource ──
 generate_compose() {
-    info "Generating docker-compose with resource limits..."
+    info "Generating docker-compose with resource limits (Caddy TLS + mbbank)..."
+
+    # Keep Caddyfile domain in sync
+    if [ -f deployment/Caddyfile ]; then
+        sed -i "s/bot.minhvuong.io.vn/${C2_DOMAIN}/g" deployment/Caddyfile 2>/dev/null || true
+    fi
 
     cat > deployment/docker-compose.yml << EOF
 version: '3.8'
@@ -207,11 +219,6 @@ services:
         limits:
           memory: ${DB_MEM}
           cpus: '${POSTGRES_CPU}.0'
-    command: >
-      -c shared_buffers=${DB_SHARED_BUFFERS}
-      -c effective_cache_size=${DB_EFFECTIVE_CACHE}
-      -c max_connections=100
-      -c random_page_cost=1.1
 
   redis:
     image: redis:7-alpine
@@ -224,6 +231,20 @@ services:
         limits:
           memory: ${REDIS_MEM}
 
+  mbbank:
+    build: ../mbbank-service
+    restart: unless-stopped
+    environment:
+      MBBANK_USERNAME: \${MB_USERNAME}
+      MBBANK_PASSWORD: \${MB_PASSWORD}
+      MBBANK_ACCOUNT_NUMBER: \${MB_ACCOUNT_NUMBER}
+      MBBANK_ACCOUNT_NAME: \${MB_ACCOUNT_NAME}
+      API_KEY: \${MB_SERVICE_API_KEY:-c2-mb-internal-key}
+      PORT: 3000
+      HOST: 0.0.0.0
+    expose:
+      - "3000"
+
   api:
     build: ../backend
     restart: unless-stopped
@@ -234,7 +255,7 @@ services:
       REDIS_URL: redis://:\${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: \${JWT_SECRET}
       C2_HOST: 0.0.0.0
-      C2_PORT: 443
+      C2_PORT: 8000
       C2_DOMAIN: \${C2_DOMAIN}
       DASHBOARD_URL: \${DASHBOARD_URL}
       TELEGRAM_BOT_TOKEN: \${TELEGRAM_BOT_TOKEN}
@@ -243,13 +264,19 @@ services:
       STRIPE_WEBHOOK_SECRET: \${STRIPE_WEBHOOK_SECRET}
       MB_USERNAME: \${MB_USERNAME}
       MB_PASSWORD: \${MB_PASSWORD}
+      MB_ACCOUNT_NUMBER: \${MB_ACCOUNT_NUMBER}
+      MB_ACCOUNT_NAME: \${MB_ACCOUNT_NAME}
+      MB_SERVICE_URL: http://mbbank:3000
+      MB_SERVICE_API_KEY: \${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       LOG_LEVEL: \${LOG_LEVEL:-INFO}
-    ports:
-      - "80:443"
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      mbbank:
         condition: service_started
     deploy:
       resources:
@@ -257,11 +284,27 @@ services:
           memory: ${API_MEM}
           cpus: '${API_CPU}.0'
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
 EOF
 
-    ok "docker-compose.yml generated with auto resource allocation"
+    ok "docker-compose.yml generated (Caddy:443 → api:8000, mbbank service)"
 }
 
 # ── Step 6: Build & Deploy ────────────────────────
@@ -288,11 +331,13 @@ verify() {
 
     info "Containers: ${RUNNING}/${TOTAL} running"
 
-    # Check API
-    if curl -s http://localhost/health 2>/dev/null | grep -q "ok"; then
-        ok "API health check: PASS"
+    # Check API via Caddy or direct
+    if curl -sk https://localhost/health 2>/dev/null | grep -q "ok"; then
+        ok "API health (HTTPS): PASS"
+    elif curl -s http://localhost/health 2>/dev/null | grep -q "ok"; then
+        ok "API health (HTTP): PASS"
     else
-        warn "API health check: waiting... (có thể mất 10-30s để khởi động)"
+        warn "API health check: waiting... (Caddy may need 10-30s + TLS cert)"
     fi
 
     # Check DB

@@ -25,6 +25,31 @@ services:
     command: redis-server --requirepass ${REDIS_PASSWORD:-redispass}
     ports:
       - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redispass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mbbank:
+    build: ../mbbank-service
+    restart: unless-stopped
+    environment:
+      MBBANK_USERNAME: ${MB_USERNAME:-}
+      MBBANK_PASSWORD: ${MB_PASSWORD:-}
+      MBBANK_ACCOUNT_NUMBER: ${MB_ACCOUNT_NUMBER:-}
+      MBBANK_ACCOUNT_NAME: ${MB_ACCOUNT_NAME:-}
+      API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
+      PORT: 3000
+      HOST: 0.0.0.0
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   api:
     build: ../backend
@@ -37,14 +62,18 @@ services:
       JWT_SECRET: ${JWT_SECRET:-super-secret-change-this}
       C2_HOST: 0.0.0.0
       C2_PORT: 8000
-      C2_DOMAIN: ${C2_DOMAIN:-api.your-domain.com}
-      DASHBOARD_URL: ${DASHBOARD_URL:-https://your-domain.com}
+      C2_DOMAIN: ${C2_DOMAIN:-bot.minhvuong.io.vn}
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://bot.minhvuong.io.vn}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_ADMIN_CHAT_ID: ${TELEGRAM_ADMIN_CHAT_ID:-}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       MB_USERNAME: ${MB_USERNAME:-}
       MB_PASSWORD: ${MB_PASSWORD:-}
+      MB_ACCOUNT_NUMBER: ${MB_ACCOUNT_NUMBER:-}
+      MB_ACCOUNT_NAME: ${MB_ACCOUNT_NAME:-}
+      MB_SERVICE_URL: http://mbbank:3000
+      MB_SERVICE_API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     expose:
       - "8000"
@@ -53,6 +82,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      mbbank:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   caddy:
     image: caddy:2-alpine
@@ -66,7 +103,10 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - api
+      api:
+        condition: service_started
+    # Edit deployment/Caddyfile domain if not bot.minhvuong.io.vn
+
 
 volumes:
   pgdata:

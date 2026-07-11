@@ -15,14 +15,20 @@ from app.mbbank import get_mb, mb_payment_scanner
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_redis()
-    async with engine.begin() as conn: await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     print(f"🚀 C2 Server running on {settings.C2_HOST}:{settings.C2_PORT}")
-    try: await init_telegram()
-    except Exception as e: print(f"[Telegram] Init failed: {e}")
-    if settings.MB_USERNAME and settings.MB_PASSWORD:
+    try:
+        await init_telegram()
+    except Exception as e:
+        print(f"[Telegram] Init failed: {e}")
+    # Start MB scanner if service or credentials configured
+    if settings.MB_SERVICE_URL or (settings.MB_USERNAME and settings.MB_PASSWORD):
         asyncio.create_task(mb_payment_scanner())
+        print("[MB] Payment scanner scheduled")
     yield
-    await close_redis(); await engine.dispose()
+    await close_redis()
+    await engine.dispose()
 
 app = FastAPI(title="C2 Center", version="4.0.0", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -63,43 +69,90 @@ async def stripe_webhook(request: Request):
 async def mbank_create(request: Request):
     from app.database import async_session
     from app.models.all_models import Payment, Plan, User
+    from app.mbbank import payment_qr_payload, get_mb
     from sqlalchemy import select
     data = await request.json()
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     from app.auth import decode_token
     payload = decode_token(token)
-    if not payload: return JSONResponse({"error": "Unauthorized"}, 401)
+    if not payload:
+        return JSONResponse({"error": "Unauthorized"}, 401)
     async with async_session() as s:
         r = await s.execute(select(User).where(User.id == payload["sub"]))
         user = r.scalar_one_or_none()
-        if not user: return JSONResponse({"error": "User not found"}, 404)
+        if not user:
+            return JSONResponse({"error": "User not found"}, 404)
         plan_slug = data.get("plan", "basic")
         r2 = await s.execute(select(Plan).where(Plan.slug == plan_slug))
         plan = r2.scalar_one_or_none()
-        if not plan: return JSONResponse({"error": "Plan not found"}, 404)
-        tx_ref = f"C2-{uuid.uuid4().hex[:8].upper()}"
-        payment = Payment(user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd, method="mbank", tx_ref=tx_ref, meta={"plan_id": str(plan.id), "plan_slug": plan.slug})
-        s.add(payment); await s.commit()
-        mb = await get_mb()
-        mb_info = mb.account_no if mb else "Liên hệ admin"
-        return JSONResponse({"status": "pending", "tx_ref": tx_ref, "amount": plan.price_vnd, "bank_account": mb_info, "bank_name": "MB Bank", "description": tx_ref, "message": f"Chuyển khoản {plan.price_vnd:,}đ đến MB Bank. Nội dung: {tx_ref}"})
+        if not plan:
+            return JSONResponse({"error": "Plan not found"}, 404)
+        tx_ref = f"C2{uuid.uuid4().hex[:8].upper()}"
+        payment = Payment(
+            user_id=user.id,
+            amount_vnd=plan.price_vnd,
+            amount_usd=plan.price_usd,
+            method="mbank",
+            tx_ref=tx_ref,
+            meta={"plan_id": str(plan.id), "plan_slug": plan.slug},
+        )
+        s.add(payment)
+        await s.commit()
 
-# Serve React frontend (production build)
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+        acc = settings.MB_ACCOUNT_NUMBER
+        name = settings.MB_ACCOUNT_NAME or ""
+        if not acc:
+            try:
+                mb = await get_mb()
+                if mb:
+                    bal = await mb.get_balance()
+                    if bal:
+                        acc = bal.get("accountNumber") or acc
+                        name = bal.get("accountName") or name
+            except Exception:
+                pass
+
+        body = payment_qr_payload(
+            amount=int(plan.price_vnd),
+            tx_ref=tx_ref,
+            account_no=acc,
+            account_name=name,
+        )
+        return JSONResponse(body)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "ws": "/ws/bot/{bot_id}"}
+
+# Serve React frontend (production build) — AFTER specific API routes
+FRONTEND_DIR = "/frontend/dist"
+if not os.path.isdir(FRONTEND_DIR):
+    FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
+
 if os.path.exists(FRONTEND_DIR):
-    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
+    assets = os.path.join(FRONTEND_DIR, "assets")
+    if os.path.isdir(assets):
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
     @app.get("/{full_path:path}")
     async def serve_react(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("ws/"): return JSONResponse({"detail": "Not Found"}, 404)
+        if full_path.startswith("api/") or full_path.startswith("ws/") or full_path == "health":
+            return JSONResponse({"detail": "Not Found"}, 404)
         file_path = os.path.join(FRONTEND_DIR, full_path)
-        if os.path.isfile(file_path): return FileResponse(file_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
         return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 else:
     @app.get("/")
-    async def fallback(): return HTMLResponse("<h1>C2 Server Running</h1><p>Build frontend: <code>cd frontend && npm run build</code></p>")
-
-@app.get("/health")
-async def health(): return {"status": "ok"}
+    async def fallback():
+        return HTMLResponse("<h1>C2 Server Running</h1><p>Build frontend: <code>cd frontend && npm run build</code></p>")
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(settings.C2_PORT or 8000),
+        reload=False,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )

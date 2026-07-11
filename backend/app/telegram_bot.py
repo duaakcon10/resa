@@ -302,7 +302,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not plan:
             await query.edit_message_text("Plan not found.")
             return
-        tx_ref = f"C2-{uuid.uuid4().hex[:8].upper()}"
+        tx_ref = f"C2{uuid.uuid4().hex[:8].upper()}"
         async with async_session() as s:
             s.add(Payment(
                 user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd,
@@ -310,19 +310,34 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 meta={"plan_id": str(plan.id), "plan_slug": plan.slug},
             ))
             await s.commit()
-        mb = await get_mb()
-        mb_acc = mb.account_no if mb else "Liên hệ admin"
-        await query.edit_message_text(
-            f"🏦 *Thanh toán MB Bank*\n\n"
+        from app.mbbank import payment_qr_payload
+        from app.config import settings as _st
+        body = payment_qr_payload(
+            amount=int(plan.price_vnd),
+            tx_ref=tx_ref,
+            account_no=_st.MB_ACCOUNT_NUMBER,
+            account_name=_st.MB_ACCOUNT_NAME or "",
+        )
+        qr = body.get("qr_url") or ""
+        text = (
+            f"🏦 *Thanh toán MB Bank (VietQR)*\n\n"
             f"📦 Plan: *{plan.name}*\n"
             f"💰 Số tiền: *{plan.price_vnd:,}đ*\n"
             f"🏧 Ngân hàng: *MB Bank*\n"
-            f"📋 STK: `{mb_acc}`\n"
+            f"📋 STK: `{body.get('bank_account')}`\n"
+            f"👤 Chủ TK: `{body.get('account_name') or '—'}`\n"
             f"📝 Nội dung CK: `{tx_ref}`\n\n"
-            f"⚠️ Ghi *đúng* nội dung để auto kích hoạt.\n"
-            f"🆔 `{tx_ref}`",
-            parse_mode="Markdown",
+            f"⚠️ Quét QR trong app ngân hàng — tự điền STK + tiền + nội dung.\n"
+            f"🆔 `{tx_ref}`"
         )
+        if qr:
+            try:
+                await query.message.reply_photo(photo=qr, caption=text, parse_mode="Markdown")
+                await query.edit_message_text("✅ Đã gửi VietQR bên dưới.")
+            except Exception:
+                await query.edit_message_text(text + (f"\n\n[Mở QR]({qr})" if qr else ""), parse_mode="Markdown")
+        else:
+            await query.edit_message_text(text, parse_mode="Markdown")
 
     elif data == "pay_cancel":
         await query.edit_message_text("Đã hủy.")
