@@ -245,7 +245,7 @@ services:
       MB_PASSWORD: \${MB_PASSWORD}
       LOG_LEVEL: \${LOG_LEVEL:-INFO}
     ports:
-      - "443:443"
+      - "80:443"
     depends_on:
       postgres:
         condition: service_healthy
@@ -289,7 +289,7 @@ verify() {
     info "Containers: ${RUNNING}/${TOTAL} running"
 
     # Check API
-    if curl -s http://localhost:443/health 2>/dev/null | grep -q "ok"; then
+    if curl -s http://localhost/health 2>/dev/null | grep -q "ok"; then
         ok "API health check: PASS"
     else
         warn "API health check: waiting... (có thể mất 10-30s để khởi động)"

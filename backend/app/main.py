@@ -78,7 +78,7 @@ async def mbank_create(request: Request):
         plan = r2.scalar_one_or_none()
         if not plan: return JSONResponse({"error": "Plan not found"}, 404)
         tx_ref = f"C2-{uuid.uuid4().hex[:8].upper()}"
-        payment = Payment(user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd, method="mbank", tx_ref=tx_ref, metadata={"plan_id": str(plan.id), "plan_slug": plan.slug})
+        payment = Payment(user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd, method="mbank", tx_ref=tx_ref, meta={"plan_id": str(plan.id), "plan_slug": plan.slug})
         s.add(payment); await s.commit()
         mb = await get_mb()
         mb_info = mb.account_no if mb else "Liên hệ admin"

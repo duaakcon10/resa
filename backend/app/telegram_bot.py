@@ -167,7 +167,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not plan: await query.edit_message_text("Plan not found."); return
         tx_ref = f"C2-{uuid.uuid4().hex[:8].upper()}"
         async with async_session() as s:
-            s.add(Payment(user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd, method="mbank", tx_ref=tx_ref, metadata={"plan_id": str(plan.id), "plan_slug": plan.slug})); await s.commit()
+            s.add(Payment(user_id=user.id, amount_vnd=plan.price_vnd, amount_usd=plan.price_usd, method="mbank", tx_ref=tx_ref, meta={"plan_id": str(plan.id), "plan_slug": plan.slug})); await s.commit()
         mb = await get_mb()
         mb_acc = mb.account_no if mb else "0974163549"
         await query.edit_message_text(f"🏦 *Thanh toán MB Bank*\n\n📦 Plan: *{plan.name}*\n💰 Số tiền: *{plan.price_vnd:,}đ*\n🏧 Ngân hàng: *MB Bank*\n📋 STK: `{mb_acc}`\n📝 Nội dung CK: `{tx_ref}`\n\n⚠️ Ghi đúng nội dung để hệ thống tự động kích hoạt.\n🆔 Mã GD: `{tx_ref}`", parse_mode="Markdown")

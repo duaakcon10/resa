@@ -47,7 +47,7 @@ services:
       MB_PASSWORD: ${MB_PASSWORD:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
-      - "443:443"
+      - "80:443"
     depends_on:
       postgres:
         condition: service_healthy

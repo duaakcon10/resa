@@ -251,7 +251,7 @@ async def mb_payment_scanner():
                             p.status = "completed"
                             p.completed_at = datetime.now(timezone.utc)
                             p.tx_ref = matched["tx_id"]
-                            p.metadata = {**p.metadata, "matched_tx": matched}
+                            p.meta = {**p.meta, "matched_tx": matched}
                             r2 = await s.execute(select(Plan).where(Plan.price_vnd == payment.amount_vnd))
                             plan = r2.scalar_one_or_none()
                             if plan:

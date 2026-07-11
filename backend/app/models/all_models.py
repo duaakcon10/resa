@@ -67,7 +67,7 @@ class Payment(Base):
     status = Column(String(16), default="pending")
     tx_ref = Column(String(128), unique=True)
     payment_url = Column(Text)
-    metadata = Column(JSONB, default={})
+    meta = Column('metadata', JSONB, default={})
     created_at = Column(DateTime(timezone=True), default=utcnow)
     completed_at = Column(DateTime(timezone=True))
     user = relationship("User", back_populates="payments")
