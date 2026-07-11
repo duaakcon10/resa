@@ -36,7 +36,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-redispass}@redis:6379
       JWT_SECRET: ${JWT_SECRET:-super-secret-change-this}
       C2_HOST: 0.0.0.0
-      C2_PORT: 443
+      C2_PORT: 8000
       C2_DOMAIN: ${C2_DOMAIN:-api.your-domain.com}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://your-domain.com}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
@@ -46,13 +46,29 @@ services:
       MB_USERNAME: ${MB_USERNAME:-}
       MB_PASSWORD: ${MB_PASSWORD:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "80:443"
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
 
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

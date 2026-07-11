@@ -10,51 +10,52 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) { setError('Please fill in all fields'); return; }
-    setLoading(true); setError('');
+    if (!username || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    setLoading(true);
+    setError('');
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Invalid credentials');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || data.message || 'Invalid credentials');
+      if (!data.access_token) throw new Error('No token returned');
       onLogin(data.access_token);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Login failed');
     }
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center p-4">
+    <div className="min-h-screen w-full bg-[var(--bg-primary)] flex items-center justify-center p-4">
       <div className="w-full max-w-md animate-fade-in">
-        {/* Logo */}
         <div className="text-center mb-10">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-600/10 border border-emerald-600/20 flex items-center justify-center mx-auto mb-5">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-600/25 flex items-center justify-center mx-auto mb-5 shadow-[0_0_40px_rgba(16,185,129,0.15)]">
             <Shield className="w-8 h-8 text-emerald-400" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">C2 Command Center</h1>
           <p className="text-sm text-[var(--text-muted)] mt-2">Authenticate to continue</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-8">
+        <form onSubmit={handleSubmit} className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-8 shadow-xl">
           <div className="space-y-5">
             <div>
               <label className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider block mb-2">Username</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-600 transition-colors placeholder:text-[var(--text-muted)]"
-                  placeholder="Enter your username"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  autoFocus
-                  autoComplete="username"
-                />
-              </div>
+              <input
+                type="text"
+                className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-emerald-600 transition-colors placeholder:text-[var(--text-muted)]"
+                placeholder="Enter your username"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                autoFocus
+                autoComplete="username"
+              />
             </div>
 
             <div>
@@ -98,7 +99,7 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
             ) : (
               <LogIn className="w-4 h-4" />
             )}
-            {loading ? 'Authenticating...' : 'Sign In'}
+            {loading ? 'Authenticating…' : 'Sign In'}
           </button>
 
           <p className="text-[11px] text-[var(--text-muted)] text-center mt-6">

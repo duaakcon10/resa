@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60
     C2_HOST: str = "0.0.0.0"
-    C2_PORT: int = 443
+    C2_PORT: int = 8000
     C2_DOMAIN: str = "api.your-domain.com"
     DASHBOARD_URL: str = "https://your-domain.com"
     TELEGRAM_BOT_TOKEN: Optional[str] = None

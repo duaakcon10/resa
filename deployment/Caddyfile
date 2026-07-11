@@ -1,0 +1,64 @@
+{
+    # Global options
+    admin off
+    # auto_https disable_redirects
+}
+
+# C2 Server — TLS termination + reverse proxy
+# Replace bot.minhvuong.io.vn with your domain
+bot.minhvuong.io.vn {
+    # WebSocket upgrade for bot connections
+    @ws {
+        path /ws/*
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @ws api:443 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+    }
+
+    # API routes
+    handle /api/* {
+        reverse_proxy api:443
+    }
+
+    # Stripe webhook
+    handle /api/payment/stripe/webhook {
+        reverse_proxy api:443
+    }
+
+    # Static frontend + SPA fallback
+    handle {
+        reverse_proxy api:443
+    }
+
+    # TLS settings
+    tls {
+        protocols tls1.2 tls1.3
+        ciphers TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+        curve p521 p384 X25519
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    # Logging
+    log {
+        output file /data/access.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# HTTP → HTTPS redirect
+http://bot.minhvuong.io.vn {
+    redir https://{host}{uri} permanent
+}

