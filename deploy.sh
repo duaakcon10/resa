@@ -227,6 +227,8 @@ services:
   api:
     build: ../backend
     restart: unless-stopped
+    volumes:
+      - ../frontend/dist:/frontend/dist:ro
     environment:
       DATABASE_URL: postgresql+asyncpg://c2_admin:\${DB_PASSWORD}@postgres:5432/c2_db
       REDIS_URL: redis://:\${REDIS_PASSWORD}@redis:6379

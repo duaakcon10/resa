@@ -1,0 +1,1 @@
+{"version":"7.0.2","root":["./src/app.tsx","./src/main.tsx","./src/components/sidebar.tsx","./src/pages/attack.tsx","./src/pages/botdetail.tsx","./src/pages/bots.tsx","./src/pages/dashboard.tsx","./src/pages/login.tsx","./src/pages/logs.tsx","./src/pages/plans.tsx","./src/pages/users.tsx","./src/utils/api.ts"],"packageJsons":["./package.json"],"semanticErrors":true}

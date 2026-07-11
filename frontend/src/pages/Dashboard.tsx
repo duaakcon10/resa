@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../utils/api';
-import { Bot, Crosshair, Users, Zap, Activity, Shield, TrendingUp, Server } from 'lucide-react';
+import { Bot, Crosshair, Users, Zap, Activity, Shield, TrendingUp, Server, ShoppingCart } from 'lucide-react';
 
 interface Stats {
   total_bots: number; online_bots: number; rented_bots: number;
