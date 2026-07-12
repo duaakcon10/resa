@@ -205,6 +205,11 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                 uid = _try_uuid(session_key)
                 if uid:
                     await BotService.update_heartbeat(uid, data)
+                # Reply so bot knows connection is alive (prevents stale disconnect)
+                try:
+                    await ws.send_json({"type": "heartbeat_ack", "timestamp": data.get("timestamp")})
+                except Exception:
+                    pass
 
             elif msg_type == "attack_stats":
                 task_id = data.get("task_id")
