@@ -24,7 +24,7 @@ const METHODS = [
   { id: 'MEGA', desc: 'Full power' },
 ];
 
-export default function Attack() {
+export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({

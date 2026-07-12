@@ -1,21 +1,28 @@
 {
 	admin off
+	# Cloudflare terminates TLS (Flexible or Full → origin HTTP:80).
+	# NEVER auto-redirect HTTP→HTTPS here or CF Flexible causes ERR_TOO_MANY_REDIRECTS.
+	auto_https off
 }
 
 :80 {
 	encode gzip
 
-	# Bot WebSocket — long-lived connections
+	# Long-lived WebSocket for bots (and online WS testers)
 	@botws path /ws/*
 	handle @botws {
 		reverse_proxy api:8000 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
+			# Force https so apps know public scheme is HTTPS via Cloudflare
+			header_up X-Forwarded-Proto https
+			header_up Connection {http.request.header.Connection}
+			header_up Upgrade {http.request.header.Upgrade}
 			transport http {
 				read_timeout 0
 				write_timeout 0
+				dial_timeout 10s
 			}
 		}
 	}
@@ -25,8 +32,12 @@
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Proto https
 		}
+	}
+
+	handle /health {
+		reverse_proxy api:8000
 	}
 
 	handle {
@@ -34,7 +45,7 @@
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
 			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
+			header_up X-Forwarded-Proto https
 		}
 	}
 

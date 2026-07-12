@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { Shield, LogIn, Eye, EyeOff } from 'lucide-react';
+import type { Role } from '../App';
 
-export default function Login({ onLogin }: { onLogin: (token: string) => void }) {
+export default function Login({
+  onLogin,
+}: {
+  onLogin: (token: string, role: Role, username: string) => void;
+}) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -25,7 +30,8 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || data.message || 'Invalid credentials');
       if (!data.access_token) throw new Error('No token returned');
-      onLogin(data.access_token);
+      const role: Role = data.role === 'admin' ? 'admin' : 'user';
+      onLogin(data.access_token, role, username);
     } catch (err: any) {
       setError(err.message || 'Login failed');
     }
@@ -103,7 +109,7 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
           </button>
 
           <p className="text-[11px] text-[var(--text-muted)] text-center mt-6">
-            C2 Botnet Control Panel — Authorized access only
+            Admin and user accounts share this portal · role-based access
           </p>
         </form>
       </div>

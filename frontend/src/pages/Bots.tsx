@@ -11,7 +11,7 @@ interface Bot {
   enabled_methods: string[]; last_heartbeat_at: string | null; bot_version: string;
 }
 
-export default function Bots({ onViewBot }: { onViewBot: (id: string) => void }) {
+export default function Bots({ onViewBot, role = 'user' }: { onViewBot: (id: string) => void; role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [bots, setBots] = useState<Bot[]>([]);
   const [total, setTotal] = useState(0);
@@ -86,7 +86,7 @@ export default function Bots({ onViewBot }: { onViewBot: (id: string) => void })
     <div className="p-6 md:p-8 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Bot Management</h2>
+          <h2 className="text-2xl font-bold">{role === 'admin' ? 'Bot Management' : 'My Bots'}</h2>
           <p className="text-sm text-[var(--text-muted)] mt-1">
             {total} bots · <span className="text-emerald-400">{onlineCount}</span> online on this page
           </p>
@@ -185,20 +185,24 @@ export default function Bots({ onViewBot }: { onViewBot: (id: string) => void })
                       : <span className="text-[var(--text-muted)]">Free</span>}
                   </td>
                   <td className="p-4" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
-                      {bot.status === 'online' ? (
-                        <button onClick={() => toggle(bot.id, false)} className="p-1.5 hover:bg-yellow-600/10 rounded-lg text-yellow-400 transition-colors" title="Disable">
-                          <PowerOff className="w-3.5 h-3.5" />
+                    {role === 'admin' ? (
+                      <div className="flex items-center gap-1.5">
+                        {bot.status === 'online' ? (
+                          <button onClick={() => toggle(bot.id, false)} className="p-1.5 hover:bg-yellow-600/10 rounded-lg text-yellow-400 transition-colors" title="Disable">
+                            <PowerOff className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button onClick={() => toggle(bot.id, true)} className="p-1.5 hover:bg-emerald-600/10 rounded-lg text-emerald-400 transition-colors" title="Enable">
+                            <Power className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => ban(bot.id)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-400 transition-colors" title="Ban">
+                          <Ban className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
-                        <button onClick={() => toggle(bot.id, true)} className="p-1.5 hover:bg-emerald-600/10 rounded-lg text-emerald-400 transition-colors" title="Enable">
-                          <Power className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                      <button onClick={() => ban(bot.id)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-400 transition-colors" title="Ban">
-                        <Ban className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[var(--text-muted)]">View</span>
+                    )}
                   </td>
                 </tr>
               ))}

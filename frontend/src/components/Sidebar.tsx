@@ -2,24 +2,28 @@ import React from 'react';
 import {
   LayoutDashboard, Bot, Crosshair, ShoppingCart, Users, ScrollText, LogOut, Shield, Activity
 } from 'lucide-react';
-import type { Page } from '../App';
+import type { Page, Role } from '../App';
 
-const navItems: { page: Page; label: string; icon: React.ElementType; desc: string }[] = [
+const allNav: { page: Page; label: string; icon: React.ElementType; desc: string; adminOnly?: boolean }[] = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, desc: 'Overview' },
   { page: 'bots', label: 'Bots', icon: Bot, desc: 'Fleet' },
   { page: 'attack', label: 'Attack', icon: Crosshair, desc: 'Launch' },
   { page: 'plans', label: 'Plans', icon: ShoppingCart, desc: 'Billing' },
-  { page: 'users', label: 'Users', icon: Users, desc: 'Accounts' },
-  { page: 'logs', label: 'Logs', icon: ScrollText, desc: 'Audit' },
+  { page: 'users', label: 'Users', icon: Users, desc: 'Accounts', adminOnly: true },
+  { page: 'logs', label: 'Logs', icon: ScrollText, desc: 'Audit', adminOnly: true },
 ];
 
 export default function Sidebar({
-  activePage, onNavigate, onLogout,
+  activePage, onNavigate, onLogout, role, username,
 }: {
   activePage: Page;
   onNavigate: (p: Page) => void;
   onLogout: () => void;
+  role: Role;
+  username: string;
 }) {
+  const navItems = allNav.filter(n => !n.adminOnly || role === 'admin');
+
   return (
     <aside className="w-64 h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col select-none">
       <div className="p-5 border-b border-[var(--border)]">
@@ -36,7 +40,9 @@ export default function Sidebar({
 
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         <div className="px-3 py-2">
-          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.15em]">Navigation</p>
+          <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.15em]">
+            {role === 'admin' ? 'Admin' : 'Client'}
+          </p>
         </div>
         {navItems.map(({ page, label, icon: Icon, desc }) => {
           const active = activePage === page || (activePage === 'bot-detail' && page === 'bots');
@@ -77,8 +83,10 @@ export default function Sidebar({
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div>
-              <p className="text-xs font-medium text-[var(--text-primary)]">Admin</p>
-              <p className="text-[10px] text-[var(--text-muted)]">Full access</p>
+              <p className="text-xs font-medium text-[var(--text-primary)] truncate max-w-[120px]">
+                {username || (role === 'admin' ? 'Admin' : 'User')}
+              </p>
+              <p className="text-[10px] text-[var(--text-muted)] capitalize">{role} access</p>
             </div>
           </div>
         </div>

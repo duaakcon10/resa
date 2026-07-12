@@ -13,7 +13,7 @@ interface Bot {
   last_heartbeat_at: string | null; first_seen_at: string | null; bot_version: string;
 }
 
-export default function BotDetail({ botId, onBack }: { botId: string; onBack: () => void }) {
+export default function BotDetail({ botId, onBack, role = 'user' }: { botId: string; onBack: () => void; role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [bot, setBot] = useState<Bot | null>(null);
   const [th, setTh] = useState({
@@ -104,7 +104,7 @@ export default function BotDetail({ botId, onBack }: { botId: string; onBack: ()
         ))}
       </div>
 
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-6">
+      {role === 'admin' && <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-6">
         <h3 className="text-sm font-semibold mb-6 flex items-center gap-2">
           <Shield className="w-4 h-4 text-emerald-400" />Throttle Configuration
         </h3>
@@ -172,7 +172,7 @@ export default function BotDetail({ botId, onBack }: { botId: string; onBack: ()
             <Save className="w-3.5 h-3.5" />{saving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

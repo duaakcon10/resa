@@ -122,7 +122,31 @@ async def mbank_create(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "ws": "/ws/bot/{bot_id}"}
+    from app.websocket.bot_handler import manager
+    return {
+        "status": "ok",
+        "ws": "wss://{host}/ws/bot/{uuid}",
+        "ws_online": len(manager.active),
+        "hint": "Use WebSocket upgrade on /ws/bot/<uuid-v4>, not plain HTTP GET",
+    }
+
+@app.get("/api/ws/status")
+async def ws_status():
+    """Public diagnostic for WS connectivity (no secrets)."""
+    from app.websocket.bot_handler import manager
+    return {
+        "connected_bots": len(manager.active),
+        "bot_ids": list(manager.active.keys())[:50],
+        "path": "/ws/bot/{bot_id}",
+        "protocol": "WebSocket RFC6455 — client must send Sec-WebSocket-Key + Upgrade",
+        "test_url_example": "wss://YOUR_DOMAIN/ws/bot/00000000-0000-4000-8000-000000000001",
+        "notes": [
+            "Online WS testers must use wss:// not https://",
+            "Path must include a UUID after /ws/bot/",
+            "Cloudflare: SSL Flexible or Full; enable Network → WebSockets",
+            "After connect, bot sends JSON {type:handshake,...}",
+        ],
+    }
 
 # Serve React frontend (production build) — AFTER specific API routes
 FRONTEND_DIR = "/frontend/dist"

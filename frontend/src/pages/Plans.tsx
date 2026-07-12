@@ -22,7 +22,7 @@ interface PayResult {
   message?: string;
 }
 
-export default function Plans() {
+export default function Plans({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [buying, setBuying] = useState<string | null>(null);
