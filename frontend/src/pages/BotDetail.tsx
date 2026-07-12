@@ -149,7 +149,7 @@ export default function BotDetail({ botId, onBack, role = 'user' }: { botId: str
           <div>
             <label className="text-xs text-[var(--text-secondary)] block mb-2">Allowed Methods</label>
             <div className="flex flex-wrap gap-1.5">
-              {['UDP','TCP','HTTP','SYN','ICMP','MIX','SLOWLORIS','TLS_EXHAUST','DNS_AMP','GAME_MIMIC','MEGA'].map(m => (
+              {['UDP','MEGA','SYN','TLS_EXHAUST','HTTP','SLOWLORIS','DNS_AMP'].map(m => (
                 <button
                   key={m}
                   type="button"

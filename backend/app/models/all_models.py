@@ -113,7 +113,6 @@ class AttackTask(Base):
     slowloris = Column(Boolean, default=False)
     tls_exhaust = Column(Boolean, default=False)
     dns_amp = Column(Boolean, default=False)
-    game_mimic = Column(Boolean, default=False)
     mega_mode = Column(Boolean, default=False)
     status = Column(String(16), default="pending")
     bot_ids = Column(ARRAY(UUID), default=list)

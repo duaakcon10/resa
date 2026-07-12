@@ -49,6 +49,17 @@ export default function Users() {
     }
   };
 
+  const deleteUser = async (id: string) => {
+    if (!confirm('Permanently delete this user?')) return;
+    try {
+      await api.delete(`/api/admin/users/${id}`);
+      setUsers(prev => prev.filter(u => u.id !== id));
+      toast('User deleted', 'success');
+    } catch {
+      toast('Delete failed', 'error');
+    }
+  };
+
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);

@@ -94,7 +94,6 @@ class AttackService:
                 slowloris=data.slowloris,
                 tls_exhaust=data.tls_exhaust,
                 dns_amp=data.dns_amp,
-                game_mimic=data.game_mimic,
                 mega_mode=data.mega_mode,
                 status="pending",
                 bot_ids=bot_ids,

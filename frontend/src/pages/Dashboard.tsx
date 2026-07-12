@@ -181,6 +181,15 @@ export default function Dashboard({
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   <span className="text-[10px] text-[var(--text-muted)] font-medium">{ok ? 'online' : 'offline'}</span>
+                </div>
+              </div>
+            ))}
+            {role === 'admin' && (
+              <p className="text-[10px] text-[var(--text-muted)] pt-2">
+                Test WS: <code className="text-emerald-400/80">GET /api/ws/status</code> · path <code className="text-emerald-400/80">wss://host/ws/bot/&lt;uuid&gt;</code>
+              </p>
+            )}
+          </div>
         </div>
 
         {role === 'admin' && payments.length > 0 && (
@@ -221,10 +230,6 @@ export default function Dashboard({
           </div>
         )}
       </div>
-            ))}
-            {role === 'admin' && (
-              <p className="text-[10px] text-[var(--text-muted)] pt-2">
-                Test WS: <code className="text-emerald-400/80">GET /api/ws/status</code> · path <code className="text-emerald-400/80">wss://host/ws/bot/&lt;uuid&gt;</code>
               </p>
             )}
           </div>

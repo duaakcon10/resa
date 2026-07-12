@@ -115,7 +115,6 @@ class AttackOut(BaseModel):
     slowloris: bool = False
     tls_exhaust: bool = False
     dns_amp: bool = False
-    game_mimic: bool = False
     mega_mode: bool = False
     status: str = "pending"
     bot_ids: List[str] = []

@@ -173,7 +173,7 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     for t in tasks:
         try:
-            await AttackService.stop(t.id, user.id)
+            await AttackService.stop(t.id, user)
         except Exception:
             pass
     await update.message.reply_text(f"🛑 Đã gửi stop cho *{len(tasks)}* attack.", parse_mode="Markdown")
@@ -426,7 +426,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             slowloris=(method == "SLOWLORIS"),
             tls_exhaust=(method == "TLS_EXHAUST"),
             dns_amp=(method == "DNS_AMP"),
-            game_mimic=(method == "GAME_MIMIC"),
         )
         task = await AttackService.launch(user, atk)
         await update.message.reply_text(
