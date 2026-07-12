@@ -17,7 +17,7 @@ class AttackService:
             plan = None
             max_concurrent = 10
             max_secs = 3600
-            max_pps = 100_000_000  /* admin: no limit */
+            max_pps = 100_000_000  # admin: no limit
             allowed = None
             cooldown = 0
 

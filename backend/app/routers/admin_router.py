@@ -131,7 +131,7 @@ async def payment_history(days: int = 7, admin: User = Depends(get_current_admin
     """MB Bank transaction history for payment troubleshooting."""
     from app.mbbank import get_mb
     from app.models.all_models import Payment
-    mb = get_mb()
+    mb = await get_mb()
     results = []
     try:
         txs = await mb.get_transactions(days=days)
