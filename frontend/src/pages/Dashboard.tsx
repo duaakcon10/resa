@@ -230,11 +230,6 @@ export default function Dashboard({
           </div>
         )}
       </div>
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
