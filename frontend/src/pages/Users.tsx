@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../utils/api';
-import { Ban, CheckCircle, Search, UserPlus, X } from 'lucide-react';
+import { Ban, CheckCircle, Search, UserPlus, Trash2, X } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 interface User {
@@ -185,10 +185,13 @@ export default function Users() {
                           <CheckCircle className="w-3.5 h-3.5" />
                         </button>
                       ) : (
-                        <button onClick={() => toggleBan(u.id, true)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-400 transition-colors" title="Ban">
-                          <Ban className="w-3.5 h-3.5" />
+                          <button onClick={() => toggleBan(u.id, true)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-400 transition-colors" title="Ban">
+                            <Ban className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button onClick={() => deleteUser(u.id)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-500 transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
                     </div>
                   </td>
                 </tr>

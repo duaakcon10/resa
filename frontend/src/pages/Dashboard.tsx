@@ -26,25 +26,29 @@ export default function Dashboard({
   const [wsLive, setWsLive] = useState<number | null>(null);
   const [error, setError] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [payments, setPayments] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
         if (role === 'admin') {
-          const [s, w] = await Promise.all([
+          const [s, w, p] = await Promise.all([
             api.get('/api/admin/stats'),
             api.get('/api/admin/ws/live').catch(() => ({ data: { connected: null } })),
+            api.get('/api/admin/payments?days=7').catch(() => ({ data: { db_payments: [] } })),
           ]);
           setAdminStats(s.data);
           setWsLive(w.data?.connected ?? null);
+          setPayments(p.data?.db_payments || []);
         } else {
           const s = await api.get('/api/attacks/stats/me');
           setUserStats(s.data);
         }
         setError(false);
         setLastUpdate(new Date());
-      } catch {
+      } catch (e: any) {
         setError(true);
+        console.error('Dashboard load error:', e?.response?.status, e?.response?.data || e?.message);
       }
     };
     load();
@@ -52,12 +56,21 @@ export default function Dashboard({
     return () => clearInterval(interval);
   }, [role]);
 
+  if (!adminStats && !userStats && !error) return (
+    <div className="p-6 md:p-8 flex items-center justify-center h-full min-h-[50vh]">
+      <div className="text-center">
+        <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full mx-auto mb-3" />
+        <p className="text-xs text-[var(--text-muted)]">Loading dashboard...</p>
+      </div>
+    </div>
+  );
+
   if (error && !adminStats && !userStats) return (
     <div className="p-6 md:p-8 flex items-center justify-center h-full min-h-[50vh]">
       <div className="text-center max-w-sm">
         <Server className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-4" />
         <p className="text-[var(--text-secondary)] mb-1">Failed to load dashboard</p>
-        <p className="text-xs text-[var(--text-muted)] mb-4">Check API connectivity and JWT session</p>
+        <p className="text-xs text-[var(--text-muted)] mb-4">API unreachable — check if server is running on port 8000</p>
         <button onClick={() => window.location.reload()} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-sm font-medium transition-colors">Retry</button>
       </div>
     </div>
@@ -168,8 +181,46 @@ export default function Dashboard({
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   <span className="text-[10px] text-[var(--text-muted)] font-medium">{ok ? 'online' : 'offline'}</span>
-                </div>
-              </div>
+        </div>
+
+        {role === 'admin' && payments.length > 0 && (
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-6 mt-6">
+            <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+              <ShoppingCart className="w-4 h-4 text-amber-400" />Recent Payments
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[10px] text-[var(--text-muted)] uppercase">
+                    <th className="p-2 text-left">Date</th>
+                    <th className="p-2 text-left">Amount</th>
+                    <th className="p-2 text-left">Status</th>
+                    <th className="p-2 text-left">Tx ID</th>
+                    <th className="p-2 text-left">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((p: any, i: number) => (
+                    <tr key={i} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-hover)]/20">
+                      <td className="p-2 text-[var(--text-muted)]">{p.created_at ? new Date(p.created_at).toLocaleString() : '—'}</td>
+                      <td className="p-2 font-mono">{p.amount?.toLocaleString()} {p.currency || 'VND'}</td>
+                      <td className="p-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          p.status === 'completed' ? 'bg-emerald-600/10 text-emerald-400' :
+                          p.status === 'pending' ? 'bg-amber-600/10 text-amber-400' :
+                          'bg-red-600/10 text-red-400'
+                        }`}>{p.status || 'unknown'}</span>
+                      </td>
+                      <td className="p-2 text-[var(--text-muted)] font-mono text-[10px]">{p.tx_id?.substring(0, 20) || '—'}</td>
+                      <td className="p-2 text-[var(--text-muted)]">{p.description || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
             ))}
             {role === 'admin' && (
               <p className="text-[10px] text-[var(--text-muted)] pt-2">

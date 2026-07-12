@@ -80,7 +80,7 @@ CREATE TABLE bots (
     max_pps             INT DEFAULT 100000,
     max_mbps            INT DEFAULT 500,
     max_threads         INT DEFAULT 100,
-    enabled_methods     TEXT[] DEFAULT '{UDP,TCP,HTTP,SYN,ICMP,MIX,SLOWLORIS,TLS_EXHAUST,DNS_AMP,GAME_MIMIC,MEGA}',
+    enabled_methods     TEXT[] DEFAULT '{UDP,MEGA,SYN,TLS_EXHAUST,HTTP,SLOWLORIS,DNS_AMP}',
     spoof_mode          INT DEFAULT 0,
     fragmentation       BOOLEAN DEFAULT FALSE,
     last_heartbeat_at   TIMESTAMPTZ,

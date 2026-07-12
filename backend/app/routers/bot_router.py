@@ -115,3 +115,21 @@ async def ban_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
     await BotService.set_status(bot_id, "banned"); await manager.send_json(str(bot_id), {"type":"ban"})
     await BotService.log_admin_action(admin.id, "bot.ban", "bot", bot_id)
     return {"status":"ok"}
+
+@router.delete("/{bot_id}")
+async def delete_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
+    from app.database import async_session
+    from app.models.all_models import Bot
+    from sqlalchemy import select
+    async with async_session() as s:
+        bot = (await s.execute(select(Bot).where(Bot.id == bot_id))).scalar_one_or_none()
+        if not bot:
+            raise HTTPException(404, "Bot not found")
+        await s.delete(bot)
+        await s.commit()
+    try:
+        await manager.send_json(str(bot_id), {"type": "ban"})
+    except Exception:
+        pass
+    await BotService.log_admin_action(admin.id, "bot.delete", "bot", bot_id)
+    return {"status": "deleted"}

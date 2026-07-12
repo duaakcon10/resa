@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../utils/api';
-import { Search, Power, PowerOff, Ban, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { Search, Power, PowerOff, Ban, Trash2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 interface Bot {
@@ -61,6 +61,17 @@ export default function Bots({ onViewBot, role = 'user' }: { onViewBot: (id: str
       fetchBots();
     } catch {
       toast('Ban failed', 'error');
+    }
+  };
+
+  const deleteBot = async (id: string) => {
+    if (!confirm('Delete this bot permanently from database?')) return;
+    try {
+      await api.delete(`/api/bots/${id}`);
+      toast('Bot deleted', 'success');
+      fetchBots();
+    } catch {
+      toast('Delete failed', 'error');
     }
   };
 
@@ -198,6 +209,9 @@ export default function Bots({ onViewBot, role = 'user' }: { onViewBot: (id: str
                         )}
                         <button onClick={() => ban(bot.id)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-400 transition-colors" title="Ban">
                           <Ban className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => deleteBot(bot.id)} className="p-1.5 hover:bg-red-600/10 rounded-lg text-red-500 transition-colors" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     ) : (

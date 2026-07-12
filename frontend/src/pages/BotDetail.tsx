@@ -111,7 +111,7 @@ export default function BotDetail({ botId, onBack, role = 'user' }: { botId: str
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { label: 'Max PPS', key: 'max_pps' as const, min: 1000, max: 5000000, step: 1000 },
+              { label: 'Max PPS', key: 'max_pps' as const, min: 1000, max: 100000000, step: 1000 },
               { label: 'Max Mbps', key: 'max_mbps' as const, min: 10, max: 10000, step: 10 },
               { label: 'Max Threads', key: 'max_threads' as const, min: 1, max: 1000, step: 1 },
             ].map(({ label, key, min, max, step }) => (
