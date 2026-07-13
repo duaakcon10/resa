@@ -163,10 +163,11 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
         print(f"[WS] manager.connect failed for {bot_id}: {e}")
         try:
             await ws.close()
-    except Exception:
-        await manager.disconnect(session_key, ws)
+        except Exception:
+            pass
         return
-    print(f"[WS] connected frame sent to {bot_id}, waiting for handshake")
+    session_key = bot_id
+    print(f"[WS] bot {bot_id} connected, sending ack")
 
     try:
         await ws.send_json({
@@ -179,8 +180,11 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                 "bot_identifier": "optional-hwid",
             },
         })
+        print(f"[WS] connected frame sent to {bot_id}, waiting for handshake")
     except Exception:
-        pass
+        await manager.disconnect(session_key, ws)
+        return
+
     try:
         while True:
             raw = await ws.receive_text()
