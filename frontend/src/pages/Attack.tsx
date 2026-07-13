@@ -13,7 +13,7 @@ interface Attack {
 const METHODS = [
   { id: 'MEGA', desc: 'TCP connection flood (exhaust target FDs)' },
   { id: 'TLS_EXHAUST', desc: 'TLS exhaust (2048 conns)' },
-  { id: 'HTTP', desc: 'HTTP/HTTPS flood' },
+  { id: 'HTTP', desc: 'HTTP flood — keep-alive pool, bypass CF' },
   { id: 'SLOWLORIS', desc: 'Slowloris (512 conns)' },
   { id: 'UDP', desc: 'UDP flood (bandwidth-heavy)' },
 ];

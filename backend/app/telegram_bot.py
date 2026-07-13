@@ -149,7 +149,12 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Chưa có plan active.\nDùng /buy để mua.")
         return
     await ensure_session(user, update.effective_chat.id)
-    methods = plan.allowed_methods or ["UDP", "TCP"]
+    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "UDP"]
+    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "UDP"}
+    methods = [m for m in methods if m in valid]
+    if not methods:
+        await update.message.reply_text("❌ Plan không có method nào khả dụng.")
+        return
     kb = [[InlineKeyboardButton(m, callback_data=f"atk_method_{m}")] for m in methods]
     kb.append([InlineKeyboardButton("❌ Cancel", callback_data="atk_cancel")])
     await update.message.reply_text(
