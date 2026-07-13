@@ -188,6 +188,7 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
     try:
         while True:
             raw = await ws.receive_text()
+            print(f"[WS] bot {session_key} recv {len(raw)} bytes")
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:
@@ -203,6 +204,7 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                 continue
 
             if msg_type == "handshake":
+                print(f"[WS] bot {session_key} handshake received")
                 identifier = data.get("bot_identifier") or data.get("bot_id") or bot_id
                 handshake_bot_id = data.get("bot_id", bot_id)
                 uid = _try_uuid(handshake_bot_id) or _try_uuid(bot_id)
@@ -319,6 +321,7 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                                 await s.commit()
 
     except WebSocketDisconnect:
+        print(f"[WS] bot {session_key} disconnected")
         await manager.disconnect(session_key, ws)
     except Exception as e:
         print(f"[WS] bot {session_key} error: {e}")
