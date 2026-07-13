@@ -59,11 +59,25 @@ async def unban_user(user_id: UUID, admin: User = Depends(get_current_admin)):
 
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: UUID, admin: User = Depends(get_current_admin)):
+    """Delete user and detach FK rows that would block DELETE."""
+    from app.models.all_models import AdminLog, Payment, UserSubscription, AttackTask
+    from sqlalchemy import delete, update
     if user_id == admin.id:
         raise HTTPException(400, "Cannot delete yourself")
     async with async_session() as s:
         user = (await s.execute(select(UserModel).where(UserModel.id == user_id))).scalar_one_or_none()
-        if not user: raise HTTPException(404, "User not found")
+        if not user:
+            raise HTTPException(404, "User not found")
+        await s.execute(delete(AdminLog).where(AdminLog.admin_id == user_id))
+        await s.execute(delete(Payment).where(Payment.user_id == user_id))
+        await s.execute(delete(UserSubscription).where(UserSubscription.user_id == user_id))
+        # Keep attack history but null user if column allows; else leave tasks
+        try:
+            await s.execute(
+                update(AttackTask).where(AttackTask.user_id == user_id).values(user_id=None)
+            )
+        except Exception:
+            pass
         await s.delete(user)
         await s.commit()
         return {"status": "deleted"}

