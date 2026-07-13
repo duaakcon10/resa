@@ -1,5 +1,11 @@
+# Explicit project network so api always resolves hostname "mbbank"
+networks:
+  c2net:
+    driver: bridge
+
 services:
   postgres:
+    networks: [c2net]
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
@@ -20,6 +26,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    networks: [c2net]
     command: redis-server --requirepass ${REDIS_PASSWORD:-redispass}
     ports:
       - "127.0.0.1:6379:6379"
@@ -33,6 +40,10 @@ services:
     build: ../mbbank-service
     container_name: c2-mbbank
     restart: unless-stopped
+    networks:
+      c2net:
+        aliases:
+          - mbbank
     environment:
       MBBANK_USERNAME: ${MB_USERNAME:-}
       MBBANK_PASSWORD: ${MB_PASSWORD:-}
@@ -41,11 +52,9 @@ services:
       API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       PORT: 3000
       HOST: 0.0.0.0
-    # Host access for debug: localhost:3000 → container mbbank:3000
     ports:
       - "127.0.0.1:3000:3000"
     healthcheck:
-      # Inside mbbank container only — not the same as API health
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
@@ -56,6 +65,7 @@ services:
     build: ../backend
     container_name: c2-api
     restart: unless-stopped
+    networks: [c2net]
     volumes:
       - ../frontend/dist:/frontend/dist:ro
     environment:
@@ -74,7 +84,6 @@ services:
       MB_PASSWORD: ${MB_PASSWORD:-}
       MB_ACCOUNT_NUMBER: ${MB_ACCOUNT_NUMBER:-}
       MB_ACCOUNT_NAME: ${MB_ACCOUNT_NAME:-}
-      # Compose service DNS name (same network). Fallback host gateway if needed.
       MB_SERVICE_URL: ${MB_SERVICE_URL:-http://mbbank:3000}
       MB_SERVICE_API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -99,6 +108,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    networks: [c2net]
     ports:
       - "80:80"
     volumes:
@@ -108,7 +118,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    # Cloudflare terminates TLS; Caddy serves HTTP:80 → api:8000
 
 
 volumes:

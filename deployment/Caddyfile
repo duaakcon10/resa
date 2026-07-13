@@ -1,16 +1,25 @@
 :80 {
-	encode gzip
-
-	# WebSocket bots — explicit path (Caddy auto-upgrades WS)
+	# WebSocket bots — NO gzip, no buffering, infinite idle timeout
+	# (Cloudflare Flexible → HTTP:80; CF already terminated TLS)
 	handle /ws/* {
 		reverse_proxy api:8000 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto https
+			# Critical: stream WS frames immediately, never buffer
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+				dial_timeout 10s
+				keepalive 30s
+			}
 		}
 	}
 
 	handle /api/* {
+		encode gzip
 		reverse_proxy api:8000 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}
@@ -23,6 +32,7 @@
 	}
 
 	handle {
+		encode gzip
 		reverse_proxy api:8000 {
 			header_up Host {host}
 			header_up X-Real-IP {remote_host}

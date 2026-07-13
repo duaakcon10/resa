@@ -74,78 +74,67 @@ class MBServiceClient:
             )
         return self._session
 
-    async def health(self) -> bool:
-        """Probe /health; on DNS failure try alternate bases and stick to first that works."""
+    async def _request(self, method: str, path: str, **kwargs) -> Optional[dict]:
+        """HTTP to mbbank-service; rotate base URL on DNS/connect failure."""
         s = await self._session_get()
         last_err = None
-        for base in list(self._bases):
+        # Prefer current base first
+        bases = [self.base] + [b for b in self._bases if b != self.base]
+        for base in bases:
+            url = f"{base}{path}"
             try:
-                async with s.get(f"{base}/health") as r:
-                    if r.status != 200:
+                async with s.request(method, url, **kwargs) as r:
+                    try:
+                        data = await r.json(content_type=None)
+                    except Exception:
+                        data = {"success": r.status == 200, "status": r.status}
+                    if r.status >= 500:
+                        last_err = f"HTTP {r.status} from {base}"
                         continue
-                    data = await r.json()
-                    if data.get("success"):
-                        if base != self.base:
-                            print(f"[MB-Service] using {base} (was {self.base})")
-                            self.base = base
-                        return True
+                    if base != self.base:
+                        print(f"[MB-Service] switched to {base}")
+                        self.base = base
+                    if isinstance(data, dict):
+                        return data
+                    return {"success": True, "data": data}
             except Exception as e:
                 last_err = e
                 continue
-        print(f"[MB-Service] health error: {last_err}")
-        return False
+        print(f"[MB-Service] {method} {path} error: {last_err}")
+        return None
+
+    async def health(self) -> bool:
+        data = await self._request("GET", "/health")
+        return bool(data and data.get("success"))
 
     async def login(self) -> bool:
-        try:
-            s = await self._session_get()
-            async with s.post(f"{self.base}/api/login") as r:
-                data = await r.json()
-                ok = bool(data.get("success"))
-                print(f"[MB-Service] login: {data.get('message', ok)}")
-                return ok
-        except Exception as e:
-            print(f"[MB-Service] login error: {e}")
+        data = await self._request("POST", "/api/login")
+        if not data:
             return False
+        ok = bool(data.get("success"))
+        print(f"[MB-Service] login: {data.get('message', ok)}")
+        return ok
 
     async def get_balance(self) -> Optional[dict]:
-        try:
-            s = await self._session_get()
-            async with s.get(f"{self.base}/api/balance") as r:
-                data = await r.json()
-                if data.get("success"):
-                    return data.get("data")
-        except Exception as e:
-            print(f"[MB-Service] balance error: {e}")
+        data = await self._request("GET", "/api/balance")
+        if data and data.get("success"):
+            return data.get("data")
         return None
 
     async def get_transactions(self, days: int = 2) -> List[dict]:
-        try:
-            s = await self._session_get()
-            async with s.post(
-                f"{self.base}/api/transactions",
-                json={"days": days},
-            ) as r:
-                data = await r.json()
-                if data.get("success"):
-                    d = data.get("data") or {}
-                    return list(d.get("transactions") or [])
-        except Exception as e:
-            print(f"[MB-Service] transactions error: {e}")
+        data = await self._request("POST", "/api/transactions", json={"days": days})
+        if data and data.get("success"):
+            d = data.get("data") or {}
+            return list(d.get("transactions") or [])
         return []
 
     async def check_deposits(self, pattern: str, days: int = 2) -> List[dict]:
-        try:
-            s = await self._session_get()
-            async with s.post(
-                f"{self.base}/api/check-deposits",
-                json={"days": days, "pattern": pattern},
-            ) as r:
-                data = await r.json()
-                if data.get("success"):
-                    d = data.get("data") or {}
-                    return list(d.get("deposits") or [])
-        except Exception as e:
-            print(f"[MB-Service] check-deposits error: {e}")
+        data = await self._request(
+            "POST", "/api/check-deposits", json={"days": days, "pattern": pattern}
+        )
+        if data and data.get("success"):
+            d = data.get("data") or {}
+            return list(d.get("deposits") or [])
         return []
 
     async def find_payment(self, amount: int, description: str, days: int = 2) -> Optional[dict]:
@@ -196,17 +185,21 @@ _mb_client: Optional[MBServiceClient] = None
 
 
 async def get_mb() -> Optional[MBServiceClient]:
-    """Return client if mbbank-service is configured and reachable."""
+    """Return client if mbbank-service is configured. Probe health first (with URL fallback)."""
     global _mb_client
     if not settings.MB_SERVICE_URL and not settings.MB_USERNAME:
         return None
     if _mb_client is None:
         _mb_client = MBServiceClient()
-        # Warm login (non-fatal)
-        try:
-            await _mb_client.login()
-        except Exception as e:
-            print(f"[MB-Service] warm login: {e}")
+    # Always probe — may recover after mbbank container starts late
+    try:
+        ok = await _mb_client.health()
+        if not ok:
+            print(f"[MB-Service] not reachable (tried {_mb_client._bases})")
+            return _mb_client  # still return client; calls will retry bases
+        await _mb_client.login()
+    except Exception as e:
+        print(f"[MB-Service] warm login: {e}")
     return _mb_client
 
 

@@ -189,7 +189,29 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
 
     try:
         while True:
-            raw = await ws.receive_text()
+            try:
+                message = await ws.receive()
+            except RuntimeError as re:
+                # Starlette: "Cannot call receive once a disconnect message has been received"
+                print(f"[WS] bot {session_key} receive RuntimeError: {re}")
+                break
+
+            mtype = message.get("type")
+            if mtype == "websocket.disconnect":
+                code = message.get("code", 1000)
+                print(f"[WS] bot {session_key} client disconnect code={code}")
+                break
+            if mtype != "websocket.receive":
+                print(f"[WS] bot {session_key} unexpected ASGI type={mtype}")
+                continue
+
+            raw = message.get("text")
+            if raw is None:
+                # binary frame — ignore but log
+                b = message.get("bytes") or b""
+                print(f"[WS] bot {session_key} binary frame len={len(b)} (ignored)")
+                continue
+
             print(f"[WS] bot {session_key} recv {len(raw)} bytes: {raw[:200]}")
             try:
                 data = json.loads(raw)
@@ -351,11 +373,18 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                                 manager._task_done.pop(tkey, None)
                                 print(f"[WS] task {tkey} completed ({len(done)}/{n_bots} bots done)")
 
-    except WebSocketDisconnect:
-        print(f"[WS] bot {session_key} disconnected")
+    except WebSocketDisconnect as e:
+        code = getattr(e, "code", None)
+        print(f"[WS] bot {session_key} disconnected code={code}")
         await manager.disconnect(session_key, ws)
     except Exception as e:
-        print(f"[WS] bot {session_key} error: {e}")
+        print(f"[WS] bot {session_key} error: {type(e).__name__}: {e}")
+        try:
+            await manager.disconnect(session_key, ws)
+        except Exception:
+            pass
+    finally:
+        # Ensure cleanup even if we broke out of the loop without exception
         try:
             await manager.disconnect(session_key, ws)
         except Exception:
