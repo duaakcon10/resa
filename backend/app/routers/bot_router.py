@@ -119,12 +119,20 @@ async def ban_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
 @router.delete("/{bot_id}")
 async def delete_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
     from app.database import async_session
-    from app.models.all_models import Bot
-    from sqlalchemy import select
+    from app.models.all_models import Bot, AttackLog, AttackTask
+    from sqlalchemy import select, delete
     async with async_session() as s:
         bot = (await s.execute(select(Bot).where(Bot.id == bot_id))).scalar_one_or_none()
         if not bot:
             raise HTTPException(404, "Bot not found")
+        # Clean FK refs
+        await s.execute(delete(AttackLog).where(AttackLog.bot_id == bot_id))
+        # Remove bot from AttackTask.bot_ids arrays
+        tasks = (await s.execute(
+            select(AttackTask).where(AttackTask.bot_ids.any(bot_id))
+        )).scalars().all()
+        for t in tasks:
+            t.bot_ids = [bid for bid in (t.bot_ids or []) if bid != bot_id]
         await s.delete(bot)
         await s.commit()
     try:

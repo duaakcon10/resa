@@ -96,8 +96,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      mbbank:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
       interval: 15s

@@ -1,7 +1,6 @@
-FROM node:20-alpine
+FROM node:20-slim
 WORKDIR /app
-# tesseract optional for OCR captcha; mbbank default uses WASM model
-RUN apk add --no-cache wget
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 COPY mbbank-service.js ./
