@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     MB_PASSWORD: Optional[str] = None
     MB_ACCOUNT_NUMBER: Optional[str] = None
     MB_ACCOUNT_NAME: Optional[str] = None
-    MB_SERVICE_URL: str = "http://mbbank:3000"
+    # Docker: http://mbbank:3000 | local host: http://127.0.0.1:3000 (never 0.0.0.0 as client URL)
+    MB_SERVICE_URL: str = "http://127.0.0.1:3000"
     MB_SERVICE_API_KEY: str = "c2-mb-internal-key"
     LOG_LEVEL: str = "INFO"
 

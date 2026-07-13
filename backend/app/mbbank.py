@@ -39,11 +39,25 @@ class MBServiceClient:
     """HTTP client for mbbank-service (Node)."""
 
     def __init__(self):
-        self.base = (settings.MB_SERVICE_URL or "http://mbbank:3000").rstrip("/")
+        raw = (settings.MB_SERVICE_URL or "http://127.0.0.1:3000").rstrip("/")
+        # 0.0.0.0 is listen-only; never use as client host
+        if "0.0.0.0" in raw:
+            raw = raw.replace("0.0.0.0", "127.0.0.1")
+        self.base = raw
         self.api_key = settings.MB_SERVICE_API_KEY or "c2-mb-internal-key"
         self.account_no = settings.MB_ACCOUNT_NUMBER or ""
         self.account_name = settings.MB_ACCOUNT_NAME or ""
         self._session: Optional[aiohttp.ClientSession] = None
+        # Candidate bases if primary DNS fails (Docker / host mix)
+        self._bases = [self.base]
+        for alt in (
+            "http://mbbank:3000",
+            "http://c2-mbbank:3000",
+            "http://host.docker.internal:3000",
+            "http://127.0.0.1:3000",
+        ):
+            if alt not in self._bases:
+                self._bases.append(alt)
 
     def _headers(self) -> dict:
         return {
@@ -61,16 +75,25 @@ class MBServiceClient:
         return self._session
 
     async def health(self) -> bool:
-        try:
-            s = await self._session_get()
-            async with s.get(f"{self.base}/health") as r:
-                if r.status != 200:
-                    return False
-                data = await r.json()
-                return bool(data.get("success"))
-        except Exception as e:
-            print(f"[MB-Service] health error: {e}")
-            return False
+        """Probe /health; on DNS failure try alternate bases and stick to first that works."""
+        s = await self._session_get()
+        last_err = None
+        for base in list(self._bases):
+            try:
+                async with s.get(f"{base}/health") as r:
+                    if r.status != 200:
+                        continue
+                    data = await r.json()
+                    if data.get("success"):
+                        if base != self.base:
+                            print(f"[MB-Service] using {base} (was {self.base})")
+                            self.base = base
+                        return True
+            except Exception as e:
+                last_err = e
+                continue
+        print(f"[MB-Service] health error: {last_err}")
+        return False
 
     async def login(self) -> bool:
         try:

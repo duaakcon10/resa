@@ -31,6 +31,7 @@ services:
 
   mbbank:
     build: ../mbbank-service
+    container_name: c2-mbbank
     restart: unless-stopped
     environment:
       MBBANK_USERNAME: ${MB_USERNAME:-}
@@ -40,17 +41,20 @@ services:
       API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       PORT: 3000
       HOST: 0.0.0.0
-    expose:
-      - "3000"
+    # Host access for debug: localhost:3000 → container mbbank:3000
+    ports:
+      - "127.0.0.1:3000:3000"
     healthcheck:
+      # Inside mbbank container only — not the same as API health
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 40s
 
   api:
     build: ../backend
+    container_name: c2-api
     restart: unless-stopped
     volumes:
       - ../frontend/dist:/frontend/dist:ro
@@ -70,15 +74,20 @@ services:
       MB_PASSWORD: ${MB_PASSWORD:-}
       MB_ACCOUNT_NUMBER: ${MB_ACCOUNT_NUMBER:-}
       MB_ACCOUNT_NAME: ${MB_ACCOUNT_NAME:-}
-      MB_SERVICE_URL: http://mbbank:3000
+      # Compose service DNS name (same network). Fallback host gateway if needed.
+      MB_SERVICE_URL: ${MB_SERVICE_URL:-http://mbbank:3000}
       MB_SERVICE_API_KEY: ${MB_SERVICE_API_KEY:-c2-mb-internal-key}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     expose:
       - "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_started
+      mbbank:
         condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:8000/health"]
