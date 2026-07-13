@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
+import warnings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://c2_admin:changeme@localhost:5432/c2_db"
@@ -11,11 +12,12 @@ class Settings(BaseSettings):
     C2_PORT: int = 8000
     C2_DOMAIN: str = "bot.minhvuong.io.vn"
     DASHBOARD_URL: str = "https://bot.minhvuong.io.vn"
+    # Comma-separated origins; empty = allow dashboard domain only
+    CORS_ORIGINS: str = ""
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_ADMIN_CHAT_ID: Optional[int] = None
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
-    # MB Bank — credentials for mbbank-service
     MB_USERNAME: Optional[str] = None
     MB_PASSWORD: Optional[str] = None
     MB_ACCOUNT_NUMBER: Optional[str] = None
@@ -28,4 +30,16 @@ class Settings(BaseSettings):
         env_file = ".env"
         extra = "ignore"
 
+    def cors_origin_list(self) -> List[str]:
+        if self.CORS_ORIGINS.strip():
+            return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        # Default: dashboard origin only (not "*")
+        return [self.DASHBOARD_URL.rstrip("/")]
+
 settings = Settings()
+_weak = ("super-secret", "change-me", "changeme", "secret")
+if any(w in (settings.JWT_SECRET or "").lower() for w in _weak) or len(settings.JWT_SECRET or "") < 32:
+    warnings.warn(
+        "JWT_SECRET is weak/default — set a long random JWT_SECRET in .env for production",
+        stacklevel=1,
+    )

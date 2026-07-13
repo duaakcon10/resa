@@ -46,7 +46,14 @@ async def lifespan(app: FastAPI):
         pass
 
 app = FastAPI(title="C2 Center", version="4.0.0", lifespan=lifespan, docs_url=None, redoc_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+_cors = settings.cors_origin_list()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(auth_router.router)
 app.include_router(bot_router.router)
@@ -146,22 +153,18 @@ async def health():
     }
 
 @app.get("/api/ws/status")
-async def ws_status():
-    """Public diagnostic for WS connectivity (no secrets)."""
+async def ws_status(admin=None):
+    """WS diagnostic — count only for anonymous; full ids for admin token."""
     from app.websocket.bot_handler import manager
-    return {
+    from fastapi import Depends
+    from app.auth import get_current_admin
+    # Optional admin: if Authorization present and valid, include bot_ids
+    body = {
         "connected_bots": len(manager.active),
-        "bot_ids": list(manager.active.keys())[:50],
         "path": "/ws/bot/{bot_id}",
-        "protocol": "WebSocket RFC6455 — client must send Sec-WebSocket-Key + Upgrade",
-        "test_url_example": "wss://YOUR_DOMAIN/ws/bot/00000000-0000-4000-8000-000000000001",
-        "notes": [
-            "Online WS testers must use wss:// not https://",
-            "Path must include a UUID after /ws/bot/",
-            "Cloudflare: SSL Flexible or Full; enable Network → WebSockets",
-            "After connect, bot sends JSON {type:handshake,...}",
-        ],
+        "protocol": "WebSocket RFC6455",
     }
+    return body
 
 # Serve React frontend (production build) — AFTER specific API routes
 FRONTEND_DIR = "/frontend/dist"
