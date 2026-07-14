@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
     TELEGRAM_BOT_TOKEN: Optional[str] = None
     TELEGRAM_ADMIN_CHAT_ID: Optional[int] = None
+    TELEGRAM_BOT_USERNAME: str = "atk_vip_bot"
     STRIPE_SECRET_KEY: Optional[str] = None
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     MB_USERNAME: Optional[str] = None

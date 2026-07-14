@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Zap, Globe, Server, ArrowRight, Check } from 'lucide-react';
 
 export default function Landing({ onLogin }: { onLogin: () => void }) {
-  const [settings, setSettings] = useState({ site_name: 'C2 Command Center', telegram_bot_username: '' });
+  const [settings, setSettings] = useState({ site_name: 'C2 Command Center', telegram_bot_username: 'atk_vip_bot' });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

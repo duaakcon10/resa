@@ -26,15 +26,17 @@ export default function Sidebar({
   const navItems = allNav.filter(n => !n.adminOnly || role === 'admin');
 
   return (
-    <aside className="w-64 h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col select-none">
+    <aside className="w-64 h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col select-none relative">
+      {/* Cyber top accent line */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent opacity-30" />
       <div className="p-5 border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/5 border border-emerald-600/25 flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.12)]">
-            <Shield className="w-5 h-5 text-emerald-400" />
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--accent-glow)] to-transparent border border-[var(--accent)]/30 flex items-center justify-center cyber-glow">
+            <Shield className="w-5 h-5 text-[var(--accent)]" />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight leading-none">C2 Center</h1>
-            <p className="text-[10px] text-[var(--text-muted)] mt-1">v4.0 · Ultimate</p>
+            <h1 className="text-base font-bold tracking-tight leading-none cyber-text-glow">C2 Center</h1>
+            <p className="text-[10px] text-[var(--text-muted)] mt-1">v4.0 · Cyber</p>
           </div>
         </div>
       </div>
@@ -42,7 +44,7 @@ export default function Sidebar({
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         <div className="px-3 py-2">
           <p className="text-[10px] font-semibold text-[var(--text-muted)] uppercase tracking-[0.15em]">
-            {role === 'admin' ? 'Admin' : 'Client'}
+            {role === 'admin' ? '⚙ Admin' : '👤 Client'}
           </p>
         </div>
         {navItems.map(({ page, label, icon: Icon, desc }) => {
@@ -53,7 +55,7 @@ export default function Sidebar({
               onClick={() => onNavigate(page)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-150 group
                 ${active
-                  ? 'bg-emerald-600/12 text-emerald-400 font-medium border border-emerald-600/20 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.05)]'
+                  ? 'bg-[var(--accent-glow)] text-[var(--accent)] font-medium border border-[var(--accent)]/20 cyber-glow'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] border border-transparent'
                 }`}
             >

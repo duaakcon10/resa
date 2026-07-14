@@ -31,6 +31,8 @@ function App() {
     localStorage.setItem('c2_role', r);
     localStorage.setItem('c2_user', u);
     setToken(t); setRole(r); setUsername(u); setAuthState('app');
+    // Redirect to admin pages or user pages
+    setPage(r === 'admin' ? 'dashboard' : 'attack');
   };
 
   const handleLogout = () => {
@@ -67,6 +69,7 @@ function App() {
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden">
+        <div className="scanline-overlay" />
         {sidebarOpen && (
           <div className="fixed inset-0 bg-black/60 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}

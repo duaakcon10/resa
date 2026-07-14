@@ -73,8 +73,40 @@ async def ensure_session(user: User, chat_id: int):
         return ts
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    import secrets
     tid = update.effective_user.id
+    tname = update.effective_user.username or f"user_{tid}"
+
+    # Check for deep link param: /start TOKEN
+    if context.args and len(context.args) > 0:
+        token = context.args[0]
+        # Verify token with C2 server
+        try:
+            import aiohttp
+            from app.config import settings
+            api_url = f"http://127.0.0.1:{settings.C2_PORT}/api/auth/telegram/verify-bot"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(api_url, json={
+                    "token": token,
+                    "telegram_id": tid,
+                    "telegram_username": tname,
+                }) as r:
+                    if r.status == 200:
+                        await update.message.reply_text(
+                            "✅ *Xác thực thành công!*\n\n"
+                            "Bạn có thể quay lại website — đăng nhập tự động.\n\n"
+                            f"{HELP_TEXT}",
+                            parse_mode="Markdown",
+                        )
+                    else:
+                        await update.message.reply_text(
+                            "❌ Token không hợp lệ hoặc đã hết hạn.\n"
+                            "Vui lòng thử lại trên website.",
+                        )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Lỗi xác thực: {e}")
+        return
+
+    # Normal /start (no param) — show welcome
     async with async_session() as s:
         user = await get_user(tid)
         if not user:
@@ -94,27 +126,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
             )
         else:
-            # Generate login code for website
-            r = await s.execute(select(TelegramSession).where(TelegramSession.user_id == user.id))
-            ts = r.scalar_one_or_none()
-            code = f"C2-{secrets.token_hex(6).upper()}"
-            if not ts:
-                ts = TelegramSession(user_id=user.id, chat_id=update.effective_chat.id, state="idle", data={})
-                s.add(ts)
-            ts.login_code = code
-            ts.login_code_expires = datetime.now(timezone.utc) + timedelta(minutes=10)
-            await s.commit()
-
             sub, plan = await get_user_plan(user)
             plan_line = f"Plan: *{plan.name}*" if plan else "Plan: _chưa mua_ — /buy"
-
-            website_url = getattr(settings, 'WEBSITE_URL', '') or 'https://bot.minhvuong.io.vn'
             await update.message.reply_text(
-                f"👋 *{user.username}*\n{plan_line}\n\n"
-                f"🔐 *Mã đăng nhập website:*\n`{code}`\n\n"
-                f"⏰ Hết hạn sau 10 phút\n"
-                f"🌐 Truy cập: {website_url}\n\n"
-                f"{HELP_TEXT}",
+                f"👋 *{user.username}*\n{plan_line}\n\n{HELP_TEXT}",
                 parse_mode="Markdown",
             )
 

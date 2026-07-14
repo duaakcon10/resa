@@ -214,7 +214,7 @@ CREATE INDEX idx_queue_status ON attack_queue(status);
 -- SEED DATA
 -- ============================================================
 
--- Admin: admin / admin123
+-- Admin: admin@c2.local / admin123 (email+password+code login)
 INSERT INTO users (username, email, password_hash, role) VALUES
 ('admin', 'admin@c2.local', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin')
 ON CONFLICT DO NOTHING;
