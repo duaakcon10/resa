@@ -98,7 +98,6 @@ class AttackCreate(BaseModel):
     fragmentation: bool = False
     slowloris: bool = False
     tls_exhaust: bool = False
-    dns_amp: bool = False
     mega_mode: bool = False
     payload: Optional[str] = None    # base64 game payload for GAME method
     proxies: Optional[str] = None    # proxy list ip:port, one per line
@@ -116,7 +115,7 @@ class AttackOut(BaseModel):
     fragmentation: bool = False
     slowloris: bool = False
     tls_exhaust: bool = False
-    dns_amp: bool = False
+    mega_mode: bool = False
     mega_mode: bool = False
     status: str = "pending"
     bot_ids: List[str] = []

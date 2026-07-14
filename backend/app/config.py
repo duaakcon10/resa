@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     C2_PORT: int = 8000
     C2_DOMAIN: str = "bot.minhvuong.io.vn"
     DASHBOARD_URL: str = "https://bot.minhvuong.io.vn"
+    WEBSITE_URL: str = "https://bot.minhvuong.io.vn"
     # Comma-separated origins; empty = allow dashboard domain only
     CORS_ORIGINS: str = ""
     TELEGRAM_BOT_TOKEN: Optional[str] = None
