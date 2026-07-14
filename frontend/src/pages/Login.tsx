@@ -13,8 +13,32 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const tokenRef = useRef<string>('');
 
-  // User clicks "Login via Telegram" → immediately get deep link, start polling
+  const checkLogin = async (tokenOverride?: string) => {
+    const token = tokenOverride || tokenRef.current || loginToken;
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/telegram/check', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      // pending: keep spinning
+      if (res.status === 202 || data.status === 'pending') return;
+      if (res.ok && data.access_token) {
+        setPolling(false);
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        onLogin(data.access_token, 'user', data.user_id || 'telegram-user');
+      } else if (res.status === 404 || res.status === 410) {
+        setError(typeof data.detail === 'string' ? data.detail : 'Token hết hạn — bấm User Login lại');
+        setPolling(false);
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      }
+    } catch { /* network blip — keep polling */ }
+  };
+
+  // User clicks "Login via Telegram" → get deep link, open TG, poll with stable token ref
   const startTelegramLogin = async () => {
     setLoading(true); setError('');
     try {
@@ -24,37 +48,19 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Init failed');
+      const tok = data.token as string;
+      tokenRef.current = tok;
       setDeepLink(data.deep_link);
-      setLoginToken(data.token);
+      setLoginToken(tok);
       setMode('user-waiting');
       setPolling(true);
-      // Auto-open Telegram link
       window.open(data.deep_link, '_blank');
-      // Start polling
-      pollRef.current = window.setInterval(checkLogin, 2000);
+      if (pollRef.current) clearInterval(pollRef.current);
+      // Poll immediately + every 1.5s with token captured in closure via ref
+      checkLogin(tok);
+      pollRef.current = window.setInterval(() => checkLogin(tok), 1500);
     } catch (err: any) { setError(err.message); }
     setLoading(false);
-  };
-
-  const checkLogin = async () => {
-    if (!loginToken) return;
-    try {
-      const res = await fetch('/api/auth/telegram/check', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: loginToken }),
-      });
-      if (res.status === 202) return; // still pending
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.access_token) {
-        setPolling(false);
-        if (pollRef.current) clearInterval(pollRef.current);
-        onLogin(data.access_token, 'user', data.user_id || 'telegram-user');
-      } else if (res.status !== 202) {
-        setError(data.detail || 'Login failed');
-        setPolling(false);
-        if (pollRef.current) clearInterval(pollRef.current);
-      }
-    } catch { /* retry */ }
   };
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);

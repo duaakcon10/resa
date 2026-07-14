@@ -83,29 +83,51 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             import aiohttp
             from app.config import settings
-            # Bot runs inside API container — use localhost
-            api_url = f"http://127.0.0.1:{settings.C2_PORT}/api/auth/telegram/verify-bot"
-            async with aiohttp.ClientSession() as session:
-                async with session.post(api_url, json={
-                    "token": token,
-                    "telegram_id": tid,
-                    "telegram_username": tname,
-                }) as r:
-                    resp_text = await r.text()
-                    print(f"[telegram] verify-bot status={r.status} resp={resp_text}")
-                    if r.status == 200:
-                        await update.message.reply_text(
-                            "✅ *Xác thực thành công!*\n\n"
-                            "Bạn có thể quay lại website — đăng nhập tự động.\n\n"
-                            f"{HELP_TEXT}",
-                            parse_mode="Markdown",
-                        )
-                    else:
-                        await update.message.reply_text(
-                            "❌ Token không hợp lệ hoặc đã hết hạn.\n"
-                            "Vui lòng thử lại trên website.",
-                        )
+            # Prefer in-process call (same memory as API) — avoids HTTP/localhost issues
+            from app.routers.auth_router import _pending_tokens
+            entry = _pending_tokens.get(token)
+            if entry and entry.get("expires") and entry["expires"] > datetime.now(timezone.utc):
+                entry["state"] = "verified"
+                entry["telegram_id"] = tid
+                entry["telegram_username"] = tname
+                print(f"[telegram] verify-bot OK in-process tid={tid}")
+                await update.message.reply_text(
+                    "✅ *Xác thực thành công!*\n\n"
+                    "Quay lại website — trang sẽ đăng nhập tự động.\n\n"
+                    f"{HELP_TEXT}",
+                    parse_mode="Markdown",
+                )
+            elif entry is None:
+                # Fallback HTTP if token not in this process (multi-worker)
+                api_url = f"http://127.0.0.1:{settings.C2_PORT}/api/auth/telegram/verify-bot"
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(api_url, json={
+                        "token": token,
+                        "telegram_id": tid,
+                        "telegram_username": tname,
+                    }) as r:
+                        resp_text = await r.text()
+                        print(f"[telegram] verify-bot HTTP status={r.status} resp={resp_text}")
+                        if r.status == 200:
+                            await update.message.reply_text(
+                                "✅ *Xác thực thành công!*\n\n"
+                                "Quay lại website — đăng nhập tự động.\n\n"
+                                f"{HELP_TEXT}",
+                                parse_mode="Markdown",
+                            )
+                        else:
+                            await update.message.reply_text(
+                                "❌ Token không hợp lệ hoặc đã hết hạn.\n"
+                                "Bấm *User Login* trên website rồi thử lại.",
+                                parse_mode="Markdown",
+                            )
+            else:
+                await update.message.reply_text(
+                    "❌ Token đã hết hạn.\nBấm *User Login* trên website rồi thử lại.",
+                    parse_mode="Markdown",
+                )
         except Exception as e:
+            print(f"[telegram] verify error: {e}")
             await update.message.reply_text(f"❌ Lỗi xác thực: {e}")
         return
 

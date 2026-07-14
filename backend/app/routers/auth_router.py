@@ -89,17 +89,17 @@ async def verify_via_bot(data: VerifyBotRequest):
 
 @router.post("/telegram/check")
 async def check_telegram_login(data: CheckLoginRequest, db: AsyncSession = Depends(get_db)):
-    """Step 3: Website polls this endpoint. When bot has verified, return JWT."""
+    """Step 3: Website polls this endpoint. When bot has verified, return JWT.
+    Pending returns 200 + status=pending so fetch/json clients handle easily."""
     entry = _pending_tokens.get(data.token)
     if not entry:
         print(f"[auth] check: token not found (tokens in memory: {len(_pending_tokens)})")
-        raise HTTPException(404, "Token not found")
+        raise HTTPException(404, "Token not found or already used")
     if entry["expires"] < datetime.now(timezone.utc):
         _pending_tokens.pop(data.token, None)
         raise HTTPException(410, "Token expired")
     if entry["state"] != "verified":
-        print(f"[auth] check: still pending (state={entry['state']})")
-        raise HTTPException(202, "Pending — please click the Telegram link")
+        return {"status": "pending"}
 
     # Verified! Find or create user by telegram_id
     tid = entry["telegram_id"]
