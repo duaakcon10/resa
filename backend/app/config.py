@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     MB_SERVICE_URL: str = "http://127.0.0.1:3000"
     MB_SERVICE_API_KEY: str = "c2-mb-internal-key"
     LOG_LEVEL: str = "INFO"
+    # SMTP for admin 2FA code
+    SMTP_HOST: str = "smtp.tino.vn"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "admin@minhvuong.io.vn"
+    SMTP_PASS: str = "Miu2k3com@"
+    SMTP_FROM: str = "admin@minhvuong.io.vn"
 
     class Config:
         env_file = ".env"

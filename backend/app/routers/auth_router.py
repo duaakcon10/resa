@@ -209,6 +209,12 @@ async def admin_login_step1(data: AdminLoginRequest, db: AsyncSession = Depends(
         "user_id": str(user.id),
     }
 
+    # Send code via email (primary)
+    from app.services.email_service import send_admin_code
+    sent = await send_admin_code(data.email, code)
+
+    # Also try Telegram if admin has telegram_id
+    tg_sent = False
     if user.telegram_id:
         try:
             bot_token = settings.TELEGRAM_BOT_TOKEN
@@ -218,16 +224,22 @@ async def admin_login_step1(data: AdminLoginRequest, db: AsyncSession = Depends(
                         select(TelegramSession).where(TelegramSession.user_id == user.id)
                     )).scalar_one_or_none()
                     if ts:
+                        import aiohttp
                         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
                         async with aiohttp.ClientSession() as session:
-                            await session.post(url, json={
+                            async with session.post(url, json={
                                 "chat_id": ts.chat_id,
                                 "text": f"🔐 Admin login code: {code}\n⏰ Expires in 5 minutes",
-                            })
+                            }) as r:
+                                tg_sent = r.status == 200
         except Exception as e:
             print(f"[admin-login] Telegram send failed: {e}")
 
-    return {"status": "code_sent", "message": "Verification code sent to your Telegram"}
+    if not sent and not tg_sent:
+        raise HTTPException(500, "Failed to send code. Check SMTP config.")
+
+    channel = "email" if sent else "telegram"
+    return {"status": "code_sent", "message": f"Code sent via {channel}"}
 
 
 @router.post("/admin/verify", response_model=LoginResponse)
