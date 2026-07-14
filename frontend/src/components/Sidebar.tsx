@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  LayoutDashboard, Bot, Crosshair, ShoppingCart, Users, ScrollText, LogOut, Shield, Activity
+  LayoutDashboard, Bot, Crosshair, ShoppingCart, Users, ScrollText, LogOut, Shield, Activity, Settings, CreditCard
 } from 'lucide-react';
 import type { Page, Role } from '../App';
 
@@ -8,7 +8,8 @@ const allNav: { page: Page; label: string; icon: React.ElementType; desc: string
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, desc: 'Overview' },
   { page: 'bots', label: 'Bots', icon: Bot, desc: 'Fleet' },
   { page: 'attack', label: 'Attack', icon: Crosshair, desc: 'Launch' },
-  { page: 'plans', label: 'Plans', icon: ShoppingCart, desc: 'Billing' },
+  { page: 'plans', label: 'Plans', icon: ShoppingCart, desc: 'Billing', adminOnly: true },
+  { page: 'admin-settings', label: 'Settings', icon: Settings, desc: 'Config', adminOnly: true },
   { page: 'users', label: 'Users', icon: Users, desc: 'Accounts', adminOnly: true },
   { page: 'logs', label: 'Logs', icon: ScrollText, desc: 'Audit', adminOnly: true },
 ];

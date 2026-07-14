@@ -4,10 +4,10 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 from app.auth import get_current_admin, hash_password
 from app.models.all_models import User
-from app.schemas.all_schemas import DashboardStats, UserOut
+from app.schemas.all_schemas import DashboardStats, UserOut, PlanCreate, PlanUpdate, PlanOut, SettingsUpdate, SettingsOut
 from app.database import async_session
 from sqlalchemy import select, func
-from app.models.all_models import Bot, AttackTask, User as UserModel, AdminLog, Plan, UserSubscription
+from app.models.all_models import Bot, AttackTask, User as UserModel, AdminLog, Plan, UserSubscription, SiteSettings
 from datetime import datetime, timezone, timedelta
 import secrets
 
@@ -175,3 +175,84 @@ async def payment_history(days: int = 7, admin: User = Depends(get_current_admin
         "mb_transactions": txs,
         "db_payments": db_payments,
     }
+
+# ── Plan CRUD ──
+@router.get("/plans", response_model=List[PlanOut])
+async def list_plans(admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        r = await s.execute(select(Plan).order_by(Plan.price_vnd))
+        return r.scalars().all()
+
+@router.post("/plans", response_model=PlanOut)
+async def create_plan(data: PlanCreate, admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        existing = await s.execute(select(Plan).where(Plan.slug == data.slug))
+        if existing.scalar_one_or_none():
+            raise HTTPException(409, "Slug already exists")
+        plan = Plan(**data.model_dump())
+        s.add(plan)
+        await s.commit()
+        await s.refresh(plan)
+        return plan
+
+@router.patch("/plans/{plan_id}", response_model=PlanOut)
+async def update_plan(plan_id: UUID, data: PlanUpdate, admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        plan = (await s.execute(select(Plan).where(Plan.id == plan_id))).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(404, "Plan not found")
+        for k, v in data.model_dump(exclude_unset=True).items():
+            setattr(plan, k, v)
+        await s.commit()
+        await s.refresh(plan)
+        return plan
+
+@router.delete("/plans/{plan_id}")
+async def delete_plan(plan_id: UUID, admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        plan = (await s.execute(select(Plan).where(Plan.id == plan_id))).scalar_one_or_none()
+        if not plan:
+            raise HTTPException(404, "Plan not found")
+        subs = await s.execute(select(func.count(UserSubscription.id).where(UserSubscription.plan_id == plan_id)))
+        if subs.scalar() > 0:
+            raise HTTPException(409, "Cannot delete plan with active subscriptions")
+        await s.delete(plan)
+        await s.commit()
+    return {"status": "deleted"}
+
+# ── Site Settings ──
+@router.get("/settings", response_model=SettingsOut)
+async def get_settings(admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        settings = (await s.execute(select(SiteSettings).where(SiteSettings.id == 1))).scalar_one_or_none()
+        if not settings:
+            settings = SiteSettings(id=1)
+            s.add(settings)
+            await s.commit()
+            await s.refresh(settings)
+        return settings
+
+@router.patch("/settings", response_model=SettingsOut)
+async def update_settings(data: SettingsUpdate, admin: User = Depends(get_current_admin)):
+    async with async_session() as s:
+        settings = (await s.execute(select(SiteSettings).where(SiteSettings.id == 1))).scalar_one_or_none()
+        if not settings:
+            settings = SiteSettings(id=1)
+            s.add(settings)
+        for k, v in data.model_dump(exclude_unset=True).items():
+            setattr(settings, k, v)
+        await s.commit()
+        await s.refresh(settings)
+        return settings
+
+# ── Public settings (no auth) ──
+@router.get("/public/settings", response_model=SettingsOut)
+async def public_settings():
+    async with async_session() as s:
+        settings = (await s.execute(select(SiteSettings).where(SiteSettings.id == 1))).scalar_one_or_none()
+        if not settings:
+            settings = SiteSettings(id=1)
+            s.add(settings)
+            await s.commit()
+            await s.refresh(settings)
+        return settings

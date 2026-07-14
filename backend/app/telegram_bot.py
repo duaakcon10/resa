@@ -73,6 +73,7 @@ async def ensure_session(user: User, chat_id: int):
         return ts
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    import secrets
     tid = update.effective_user.id
     async with async_session() as s:
         user = await get_user(tid)
@@ -93,10 +94,27 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
             )
         else:
+            # Generate login code for website
+            r = await s.execute(select(TelegramSession).where(TelegramSession.user_id == user.id))
+            ts = r.scalar_one_or_none()
+            code = f"C2-{secrets.token_hex(6).upper()}"
+            if not ts:
+                ts = TelegramSession(user_id=user.id, chat_id=update.effective_chat.id, state="idle", data={})
+                s.add(ts)
+            ts.login_code = code
+            ts.login_code_expires = datetime.now(timezone.utc) + timedelta(minutes=10)
+            await s.commit()
+
             sub, plan = await get_user_plan(user)
             plan_line = f"Plan: *{plan.name}*" if plan else "Plan: _chưa mua_ — /buy"
+
+            website_url = getattr(settings, 'WEBSITE_URL', '') or 'https://bot.minhvuong.io.vn'
             await update.message.reply_text(
-                f"👋 *{user.username}*\n{plan_line}\n\n{HELP_TEXT}",
+                f"👋 *{user.username}*\n{plan_line}\n\n"
+                f"🔐 *Mã đăng nhập website:*\n`{code}`\n\n"
+                f"⏰ Hết hạn sau 10 phút\n"
+                f"🌐 Truy cập: {website_url}\n\n"
+                f"{HELP_TEXT}",
                 parse_mode="Markdown",
             )
 
@@ -149,8 +167,8 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Chưa có plan active.\nDùng /buy để mua.")
         return
     await ensure_session(user, update.effective_chat.id)
-    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "UDP"]
-    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "UDP"}
+    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "UDP"]
+    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "UDP"}
     methods = [m for m in methods if m in valid]
     if not methods:
         await update.message.reply_text("❌ Plan không có method nào khả dụng.")
@@ -430,7 +448,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             mega_mode=(method == "MEGA"),
             slowloris=(method == "SLOWLORIS"),
             tls_exhaust=(method == "TLS_EXHAUST"),
-            dns_amp=(method == "DNS_AMP"),
+            # HTTP_PROXY: server auto-fetches free proxies if empty
+            # GAME: server sends crafted NRO login packet if empty
         )
         task = await AttackService.launch(user, atk)
         await update.message.reply_text(

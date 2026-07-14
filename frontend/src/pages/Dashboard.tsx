@@ -52,7 +52,9 @@ export default function Dashboard({
       }
     };
     load();
-    const interval = setInterval(load, 5000);
+    const interval = setInterval(() => {
+      if (!document.hidden) load();
+    }, 5000);
     return () => clearInterval(interval);
   }, [role]);
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional
 from uuid import UUID
+from pydantic import BaseModel
 from app.auth import get_current_admin, get_current_user
 from app.models.all_models import User
 from app.schemas.all_schemas import BotOut, BotToggle, BotAssign, BotThrottle, PaginatedResponse
@@ -141,3 +142,51 @@ async def delete_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
         pass
     await BotService.log_admin_action(admin.id, "bot.delete", "bot", bot_id)
     return {"status": "deleted"}
+
+@router.post("/{bot_id}/unban")
+async def unban_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
+    await BotService.set_status(bot_id, "offline")
+    await BotService.log_admin_action(admin.id, "bot.unban", "bot", bot_id)
+    return {"status": "ok"}
+
+@router.post("/{bot_id}/kick")
+async def kick_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
+    """Force-close the WebSocket connection for a bot."""
+    await manager.disconnect(str(bot_id), None)
+    await BotService.log_admin_action(admin.id, "bot.kick", "bot", bot_id)
+    return {"status": "kicked"}
+
+class BulkAction(BaseModel):
+    bot_ids: list[UUID]
+    action: str  # "delete" | "ban" | "unban" | "kick"
+
+@router.post("/bulk")
+async def bulk_action(data: BulkAction, admin: User=Depends(get_current_admin)):
+    from app.database import async_session
+    from app.models.all_models import Bot, AttackLog
+    from sqlalchemy import select, delete
+    deleted = 0; failed = 0
+    async with async_session() as s:
+        for bid in data.bot_ids:
+            try:
+                bot = (await s.execute(select(Bot).where(Bot.id == bid))).scalar_one_or_none()
+                if not bot:
+                    failed += 1; continue
+                if data.action == "delete":
+                    await s.execute(delete(AttackLog).where(AttackLog.bot_id == bid))
+                    await s.delete(bot)
+                elif data.action == "ban":
+                    bot.status = "banned"
+                    try: await manager.send_json(str(bid), {"type": "ban"})
+                    except: pass
+                elif data.action == "unban":
+                    bot.status = "offline"
+                elif data.action == "kick":
+                    try: await manager.disconnect(str(bid), None)
+                    except: pass
+                deleted += 1
+            except Exception:
+                failed += 1
+        await s.commit()
+    await BotService.log_admin_action(admin.id, f"bot.bulk_{data.action}", "bots", None, {"count": deleted})
+    return {"status": "ok", "affected": deleted, "failed": failed}

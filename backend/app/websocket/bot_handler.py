@@ -70,13 +70,19 @@ class BotConnectionManager:
             if ws is not None and cur is not None and cur is not ws:
                 return
             if key in self.active and (ws is None or self.active[key] is ws):
-                self.active.pop(key, None)
+                ws_to_close = self.active.pop(key, None)
                 self._last_stats.pop(key, None)
                 self._last_heartbeat.pop(key, None)
                 uid = _try_uuid(key)
                 if uid:
                     try:
                         await BotService.set_status(uid, "offline")
+                    except Exception:
+                        pass
+                # Force-close the WebSocket if we have it
+                if ws_to_close:
+                    try:
+                        await ws_to_close.close(code=1000)
                     except Exception:
                         pass
 
