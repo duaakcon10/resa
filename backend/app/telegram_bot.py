@@ -167,8 +167,8 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Chưa có plan active.\nDùng /buy để mua.")
         return
     await ensure_session(user, update.effective_chat.id)
-    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "UDP"]
-    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "UDP"}
+    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "H2RAPID", "WSFLOOD", "GRAPHQL", "UDP"]
+    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "H2RAPID", "WSFLOOD", "GRAPHQL", "UDP"}
     methods = [m for m in methods if m in valid]
     if not methods:
         await update.message.reply_text("❌ Plan không có method nào khả dụng.")

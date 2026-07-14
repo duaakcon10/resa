@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../utils/api';
-import { Settings, Save, Building2, Globe, DollarSign } from 'lucide-react';
+import { Settings, Save, Building2, Globe, DollarSign, Activity } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
 export default function AdminSettings() {
@@ -8,7 +8,7 @@ export default function AdminSettings() {
   const [form, setForm] = useState({
     site_name: '', site_url: '', telegram_bot_username: '',
     bank_account_name: '', bank_account_number: '', bank_name: 'MBBank', bank_bin: '970422',
-    min_deposit: 10000, maintenance_mode: false,
+    min_deposit: 10000, maintenance_mode: false, discord_webhook_url: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -110,6 +110,21 @@ export default function AdminSettings() {
               <input type="number" className={input} value={form.min_deposit} onChange={e => setForm(f => ({ ...f, min_deposit: +e.target.value }))} />
             </div>
           </div>
+        </div>
+
+        {/* Webhook */}
+        <div className="bg-[var(--bg-secondary)] border border-[var(--border)] rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Activity className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-semibold">Webhook Notifications</h3>
+          </div>
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className={label}>Discord Webhook URL</label>
+              <input className={input} value={form.discord_webhook_url} onChange={e => setForm(f => ({ ...f, discord_webhook_url: e.target.value }))} placeholder="https://discord.com/api/webhooks/..." />
+            </div>
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)] mt-2">Gửi thông báo Discord khi: attack complete, bot offline, queued attack launched</p>
         </div>
       </div>
     </div>
