@@ -216,7 +216,7 @@ CREATE INDEX idx_queue_status ON attack_queue(status);
 
 -- Admin: admin@c2.local / admin123 (email+password+code login)
 INSERT INTO users (username, email, password_hash, role) VALUES
-('admin', 'admin@c2.local', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin')
+('admin', 'miu2k3a@gmail.com', '$2b$12$iw2ihlUINYafpVjXjgdujOijqGp4B9fPq7A5c97PPHr6jEx5N8C4G', 'admin')
 ON CONFLICT DO NOTHING;
 
 -- Default site settings
@@ -224,7 +224,7 @@ INSERT INTO site_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- Plans (updated methods, durations, pricing)
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
-('Starter',    'starter',    '1 bot, 120s, cơ bản',           1,  1,  120, 300,  100000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                                                    10000,  0.50),
-('Pro',        'pro',        '5 bot, 300s, đầy đủ method',     5,  3,  300, 120,  500000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',                               50000,  5.00),
-('Enterprise', 'enterprise', '20 bot, 600s, toàn bộ method',  20, 10, 600,  30, 2000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',  200000, 20.00)
+('Starter',    'starter',    '3 bot, 120s, cơ bản',           3,  1,  120, 300,  500000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                                                    10000,  0.40),
+('Pro',        'pro',        '10 bot, 240s, đầy đủ method',     10,  3,  240, 120,  1000000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',                               50000,  2.00),
+('Enterprise', 'enterprise', '20 bot, 360s, toàn bộ method',  20, 10, 360,  30, 5000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',  100000, 5.00)
 ON CONFLICT DO NOTHING;
