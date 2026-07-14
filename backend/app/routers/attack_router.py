@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from uuid import UUID
-from pydantic import BaseModel
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
+from sqlalchemy import select, func
 from app.auth import get_current_user
 from app.database import async_session
 from app.models.all_models import User, AttackTemplate, AttackQueue
@@ -121,7 +122,6 @@ class TemplateCreate(BaseModel):
     bot_count: int = 1
 
 class TemplateOut(BaseModel):
-    from pydantic import ConfigDict
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     name: str
@@ -131,7 +131,7 @@ class TemplateOut(BaseModel):
     duration_secs: int
     bot_count: int
 
-@router.get("/templates", response_model=list[TemplateOut])
+@router.get("/templates", response_model=List[TemplateOut])
 async def list_templates(current_user: User = Depends(get_current_user)):
     async with async_session() as s:
         r = await s.execute(select(AttackTemplate).where(AttackTemplate.user_id == current_user.id))
@@ -169,7 +169,6 @@ async def launch_template(template_id: UUID, current_user: User = Depends(get_cu
 
 # ── Attack Queue ──
 class QueueOut(BaseModel):
-    from pydantic import ConfigDict
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     target_host: str
@@ -178,9 +177,9 @@ class QueueOut(BaseModel):
     duration_secs: int
     bot_count: int
     status: str
-    created_at: str | None = None
+    created_at: Optional[str] = None
 
-@router.get("/queue", response_model=list[QueueOut])
+@router.get("/queue")
 async def list_queue(current_user: User = Depends(get_current_user)):
     async with async_session() as s:
         r = await s.execute(select(AttackQueue).where(

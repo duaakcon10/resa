@@ -27,7 +27,7 @@ class BotConnectionManager:
         # Pending commands for HTTP/2 poll mode bots
         self._pending_cmds: Dict[str, list] = {}
 
-    def get_pending_command(self, bot_id: str) -> dict | None:
+    def get_pending_command(self, bot_id: str) -> Optional[dict]:
         """Return next pending command for HTTP/2 poll mode bot."""
         cmds = self._pending_cmds.get(bot_id)
         if cmds:

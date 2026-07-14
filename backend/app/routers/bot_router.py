@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel
 from app.auth import get_current_admin, get_current_user
@@ -157,7 +157,7 @@ async def kick_bot(bot_id: UUID, admin: User=Depends(get_current_admin)):
     return {"status": "kicked"}
 
 class BulkAction(BaseModel):
-    bot_ids: list[UUID]
+    bot_ids: List[UUID]
     action: str  # "delete" | "ban" | "unban" | "kick"
 
 @router.post("/bulk")
