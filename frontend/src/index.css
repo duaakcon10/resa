@@ -42,8 +42,26 @@ body {
 #root {
   height: 100vh;
   height: 100dvh;
-  display: flex;
   width: 100%;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Ensure main content fills available space */
+main {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* Sidebar: fixed on desktop, overlay on mobile */
+@media (max-width: 1023px) {
+  aside {
+    position: fixed !important;
+    z-index: 30;
+  }
 }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
@@ -163,12 +181,6 @@ input[type="checkbox"] {
   accent-color: var(--accent);
   width: 16px; height: 16px;
   cursor: pointer;
-}
-
-/* Fix main content not shifting left */
-main {
-  width: 100%;
-  min-width: 0;
 }
 
 @media (max-width: 640px) {

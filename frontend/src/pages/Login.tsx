@@ -3,8 +3,7 @@ import { Shield, ArrowRight, Send, Lock, Mail, Terminal, Loader2, CheckCircle2, 
 import type { Role } from '../App';
 
 export default function Login({ onLogin }: { onLogin: (token: string, role: Role, username: string) => void }) {
-  const [mode, setMode] = useState<'select' | 'user' | 'admin-step1' | 'admin-step2'>('select');
-  const [tgUsername, setTgUsername] = useState('');
+  const [mode, setMode] = useState<'select' | 'user-waiting' | 'admin-step1' | 'admin-step2'>('select');
   const [deepLink, setDeepLink] = useState('');
   const [loginToken, setLoginToken] = useState('');
   const [polling, setPolling] = useState(false);
@@ -15,28 +14,28 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
   const [loading, setLoading] = useState(false);
   const pollRef = useRef<number | null>(null);
 
-  // Step 1: Init login → get deep link
-  const initLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tgUsername.trim()) { setError('Nhập Telegram username'); return; }
+  // User clicks "Login via Telegram" → immediately get deep link, start polling
+  const startTelegramLogin = async () => {
     setLoading(true); setError('');
     try {
       const res = await fetch('/api/auth/telegram/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegram_username: tgUsername.trim().lstrip?.('@') || tgUsername.trim().replace(/^@/, '') }),
+        body: JSON.stringify({}),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Init failed');
       setDeepLink(data.deep_link);
       setLoginToken(data.token);
+      setMode('user-waiting');
       setPolling(true);
+      // Auto-open Telegram link
+      window.open(data.deep_link, '_blank');
       // Start polling
       pollRef.current = window.setInterval(checkLogin, 2000);
     } catch (err: any) { setError(err.message); }
     setLoading(false);
   };
 
-  // Step 3: Poll check endpoint
   const checkLogin = async () => {
     if (!loginToken) return;
     try {
@@ -49,7 +48,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
       if (res.ok && data.access_token) {
         setPolling(false);
         if (pollRef.current) clearInterval(pollRef.current);
-        onLogin(data.access_token, 'user', tgUsername);
+        onLogin(data.access_token, 'user', data.user_id || 'telegram-user');
       } else if (res.status !== 202) {
         setError(data.detail || 'Login failed');
         setPolling(false);
@@ -112,8 +111,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
           <h1 className="text-3xl font-bold tracking-tight cyber-text-glow">C2 Command Center</h1>
           <p className="text-sm text-[var(--text-muted)] mt-3">
             {mode === 'select' && 'Chọn phương thức đăng nhập'}
-            {mode === 'user' && !deepLink && 'Nhập Telegram username'}
-            {mode === 'user' && deepLink && 'Xác thực qua Telegram'}
+            {mode === 'user-waiting' && 'Xác thực qua Telegram'}
             {mode === 'admin-step1' && 'Admin Login — Bước 1/2'}
             {mode === 'admin-step2' && 'Admin Login — Bước 2/2'}
           </p>
@@ -123,13 +121,13 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
           {/* Mode: Select */}
           {mode === 'select' && (
             <div className="space-y-3">
-              <button onClick={() => setMode('user')} className="w-full flex items-center gap-3 p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--accent)]/40 transition-all group">
+              <button onClick={startTelegramLogin} disabled={loading} className="w-full flex items-center gap-3 p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--accent)]/40 transition-all group">
                 <div className="w-10 h-10 rounded-xl bg-[var(--accent-glow)] flex items-center justify-center">
                   <Send className="w-5 h-5 text-[var(--accent)]" />
                 </div>
                 <div className="text-left">
                   <div className="text-sm font-semibold">User Login</div>
-                  <div className="text-[11px] text-[var(--text-muted)]">Telegram deep link verify</div>
+                  <div className="text-[11px] text-[var(--text-muted)]">Click → Telegram tự mở → auto login</div>
                 </div>
                 <ArrowRight className="w-4 h-4 text-[var(--text-muted)] ml-auto group-hover:text-[var(--accent)] transition-colors" />
               </button>
@@ -146,26 +144,8 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
             </div>
           )}
 
-          {/* Mode: User (Telegram deep link) */}
-          {mode === 'user' && !deepLink && (
-            <form onSubmit={initLogin} className="space-y-4">
-              <div>
-                <label className={label}>Telegram Username</label>
-                <div className="relative">
-                  <Send className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                  <input type="text" className={input} placeholder="@username" value={tgUsername} onChange={e => setTgUsername(e.target.value)} autoFocus />
-                </div>
-              </div>
-              {error && <div className="p-3 bg-[var(--danger)]/5 border border-[var(--danger)]/15 rounded-xl flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] flex-shrink-0" /><p className="text-xs text-[var(--danger)]">{error}</p></div>}
-              <button type="submit" disabled={loading || !tgUsername.trim()} className={btn}>
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>Tạo link đăng nhập</span><ArrowRight className="w-4 h-4" /></>}
-              </button>
-              <button type="button" onClick={() => { setMode('select'); setError(''); }} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">← Quay lại</button>
-            </form>
-          )}
-
-          {/* Mode: User — deep link generated, waiting for verify */}
-          {mode === 'user' && deepLink && (
+          {/* Mode: User — waiting for Telegram verify */}
+          {mode === 'user-waiting' && (
             <div className="space-y-5">
               <div className="text-center">
                 {polling ? (
@@ -174,7 +154,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
                       <Loader2 className="w-7 h-7 text-[var(--accent)] animate-spin" />
                     </div>
                     <p className="text-sm font-semibold text-[var(--accent)] mb-1">Đang chờ xác thực...</p>
-                    <p className="text-[11px] text-[var(--text-muted)]">Click link Telegram để đăng nhập</p>
+                    <p className="text-[11px] text-[var(--text-muted)]">Mở Telegram và nhấn Start để xác thực</p>
                   </>
                 ) : (
                   <CheckCircle2 className="w-12 h-12 text-[var(--accent)] mx-auto" />
@@ -182,12 +162,12 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
               </div>
               <a href={deepLink} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-4 cyber-button rounded-xl text-sm font-bold transition-all">
                 <Send className="w-5 h-5" />
-                Mở Telegram Bot
+                Mở lại Telegram Bot
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
-              <p className="text-[10px] text-[var(--text-muted)] text-center">Link hết hạn sau 10 phút. Đăng nhập tự động khi bạn xác thực trên Telegram.</p>
+              <p className="text-[10px] text-[var(--text-muted)] text-center">Đăng nhập tự động khi bạn xác thực trên Telegram. Link hết hạn 10 phút.</p>
               {error && <div className="p-3 bg-[var(--danger)]/5 border border-[var(--danger)]/15 rounded-xl flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] flex-shrink-0" /><p className="text-xs text-[var(--danger)]">{error}</p></div>}
-              <button type="button" onClick={() => { setDeepLink(''); setLoginToken(''); setPolling(false); if (pollRef.current) clearInterval(pollRef.current); setMode('select'); setError(''); }} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">← Quay lại</button>
+              <button type="button" onClick={() => { setMode('select'); setDeepLink(''); setLoginToken(''); setPolling(false); if (pollRef.current) clearInterval(pollRef.current); setError(''); }} className="w-full text-xs text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors">← Quay lại</button>
             </div>
           )}
 

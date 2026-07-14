@@ -26,7 +26,7 @@ export default function Sidebar({
   const navItems = allNav.filter(n => !n.adminOnly || role === 'admin');
 
   return (
-    <aside className="w-64 h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col select-none relative">
+    <div className="w-64 h-full bg-[var(--bg-secondary)] border-r border-[var(--border)] flex flex-col select-none relative">
       {/* Cyber top accent line */}
       <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent opacity-30" />
       <div className="p-5 border-b border-[var(--border)]">
@@ -101,6 +101,6 @@ export default function Sidebar({
           Sign Out
         </button>
       </div>
-    </aside>
+    </div>
   );
 }

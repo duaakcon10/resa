@@ -68,17 +68,20 @@ function App() {
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-screen overflow-hidden w-full">
         <div className="scanline-overlay" />
         {sidebarOpen && (
           <div className="fixed inset-0 bg-black/60 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
-        <div className={`fixed lg:static inset-y-0 left-0 z-30 transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        {/* Sidebar: static on lg+, overlay on mobile */}
+        <aside className={`fixed lg:static inset-y-0 left-0 z-30 w-64 flex-shrink-0 transform transition-transform duration-200 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <Sidebar activePage={page} onNavigate={navigate} onLogout={handleLogout} role={role} username={username} />
-        </div>
+        </aside>
 
-        <main className="flex-1 overflow-y-auto bg-[var(--bg-primary)] min-w-0">
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto bg-[var(--bg-primary)] min-w-0 w-full">
+          {/* Mobile header */}
           <div className="lg:hidden sticky top-0 z-10 flex items-center gap-3 px-4 py-3 bg-[var(--bg-secondary)]/90 backdrop-blur border-b border-[var(--border)]">
             <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]">
               <Menu className="w-5 h-5" />

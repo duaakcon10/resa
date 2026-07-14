@@ -8,6 +8,7 @@ from app.database import get_db, async_session
 from app.models.all_models import User, TelegramSession
 from app.schemas.all_schemas import LoginResponse, UserOut
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 import secrets, aiohttp
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -19,7 +20,7 @@ _admin_codes: dict = {}
 
 
 class InitLoginRequest(BaseModel):
-    telegram_username: str  # e.g. "atk_user" (without @)
+    telegram_username: Optional[str] = None  # optional, not required
 
 
 class CheckLoginRequest(BaseModel):
@@ -42,18 +43,16 @@ class AdminVerifyRequest(BaseModel):
 
 @router.post("/telegram/init")
 async def init_telegram_login(data: InitLoginRequest):
-    """Step 1: User enters Telegram username → server generates token + deep link.
-    Returns a deep link the user clicks to open Telegram bot with token as start param."""
+    """Step 1: Generate token + deep link. No username needed — bot sends it on verify."""
     token = secrets.token_urlsafe(24)
-    username = data.telegram_username.strip().lstrip("@")
     _pending_tokens[token] = {
         "state": "pending",
-        "telegram_username": username,
+        "telegram_username": data.telegram_username or "",
         "telegram_id": None,
         "expires": datetime.now(timezone.utc) + timedelta(minutes=10),
     }
     bot_username = settings.TELEGRAM_BOT_USERNAME or "atk_vip_bot"
-    deep_link = f"https://t.me/{bot_username}?start={token}"
+    deep_link = f"https://telegram.me/{bot_username}?start={token}"
     return {
         "token": token,
         "deep_link": deep_link,
