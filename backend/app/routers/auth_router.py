@@ -60,13 +60,18 @@ async def init_telegram_login(data: InitLoginRequest):
     }
 
 
+class VerifyBotRequest(BaseModel):
+    token: str
+    telegram_id: int
+    telegram_username: str = ""
+
+
 @router.post("/telegram/verify-bot")
-async def verify_via_bot(data: dict):
-    """Called BY the Telegram bot when user clicks the deep link.
-    Bot sends: {token, telegram_id, telegram_username}"""
-    token = data.get("token", "")
-    tid = data.get("telegram_id", 0)
-    tname = data.get("telegram_username", "")
+async def verify_via_bot(data: VerifyBotRequest):
+    """Called BY the Telegram bot when user clicks the deep link."""
+    token = data.token
+    tid = data.telegram_id
+    tname = data.telegram_username
 
     entry = _pending_tokens.get(token)
     if not entry:
@@ -87,11 +92,13 @@ async def check_telegram_login(data: CheckLoginRequest, db: AsyncSession = Depen
     """Step 3: Website polls this endpoint. When bot has verified, return JWT."""
     entry = _pending_tokens.get(data.token)
     if not entry:
+        print(f"[auth] check: token not found (tokens in memory: {len(_pending_tokens)})")
         raise HTTPException(404, "Token not found")
     if entry["expires"] < datetime.now(timezone.utc):
         _pending_tokens.pop(data.token, None)
         raise HTTPException(410, "Token expired")
     if entry["state"] != "verified":
+        print(f"[auth] check: still pending (state={entry['state']})")
         raise HTTPException(202, "Pending — please click the Telegram link")
 
     # Verified! Find or create user by telegram_id

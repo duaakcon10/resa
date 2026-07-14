@@ -83,6 +83,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             import aiohttp
             from app.config import settings
+            # Bot runs inside API container — use localhost
             api_url = f"http://127.0.0.1:{settings.C2_PORT}/api/auth/telegram/verify-bot"
             async with aiohttp.ClientSession() as session:
                 async with session.post(api_url, json={
@@ -90,6 +91,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "telegram_id": tid,
                     "telegram_username": tname,
                 }) as r:
+                    resp_text = await r.text()
+                    print(f"[telegram] verify-bot status={r.status} resp={resp_text}")
                     if r.status == 200:
                         await update.message.reply_text(
                             "✅ *Xác thực thành công!*\n\n"
