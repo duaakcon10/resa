@@ -28,7 +28,7 @@ CREATE TABLE plans (
     max_attack_secs     INT NOT NULL DEFAULT 120,
     cooldown_secs       INT NOT NULL DEFAULT 300,
     max_pps_per_bot     INT NOT NULL DEFAULT 500000,
-    allowed_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',
+    allowed_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,GAME}',
     price_vnd           INT NOT NULL DEFAULT 10000,
     price_usd           DECIMAL(10,2) NOT NULL DEFAULT 0.50,
     is_active           BOOLEAN DEFAULT TRUE,
@@ -81,7 +81,7 @@ CREATE TABLE bots (
     max_pps             INT DEFAULT 50000000,
     max_mbps            INT DEFAULT 1000,
     max_threads         INT DEFAULT 10000,
-    enabled_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',
+    enabled_methods     TEXT[] DEFAULT '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,GAME}',
     spoof_mode          INT DEFAULT 0,
     fragmentation       BOOLEAN DEFAULT FALSE,
     last_heartbeat_at   TIMESTAMPTZ,
@@ -224,7 +224,7 @@ INSERT INTO site_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- Plans (updated methods, durations, pricing)
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
-('Starter',    'starter',    '3 bot, 120s, cơ bản',           3,  1,  120, 300,  500000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',                                                    10000,  0.40),
-('Pro',        'pro',        '10 bot, 240s, đầy đủ method',     10,  3,  240, 120,  1000000,  '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME}',                               50000,  2.00),
-('Enterprise', 'enterprise', '20 bot, 360s, toàn bộ method',  20, 10, 360,  30, 5000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,HTTP_PROXY,GAME,H2RAPID,WSFLOOD,GRAPHQL,UDP}',  100000, 5.00)
+('Starter',    'starter',    '3 bot, 120s — MEGA+TLS+SLOW',  3,  1,  120, 300,  500000,  '{MEGA,TLS_EXHAUST,SLOWLORIS}',           10000,  0.40),
+('Pro',        'pro',        '10 bot, 240s — full 5 methods', 10, 3,  240, 120, 1000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,GAME}', 50000,  2.00),
+('Enterprise', 'enterprise', '20 bot, 360s — full 5 methods', 20, 10, 360,  30, 5000000, '{MEGA,TLS_EXHAUST,HTTP,SLOWLORIS,GAME}', 100000, 5.00)
 ON CONFLICT DO NOTHING;

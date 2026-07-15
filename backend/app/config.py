@@ -7,7 +7,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     JWT_SECRET: str = "super-secret-change-me-to-random-64-char-string"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60
+    # Default session: 7 days (was 60 min — too short, forced re-auth constantly)
+    JWT_EXPIRE_MINUTES: int = 10080
+    # "Trust this device": 30 days
+    JWT_TRUST_DAYS: int = 30
     C2_HOST: str = "0.0.0.0"
     C2_PORT: int = 8000
     C2_DOMAIN: str = "bot.minhvuong.io.vn"

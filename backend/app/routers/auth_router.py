@@ -25,10 +25,12 @@ class InitLoginRequest(BaseModel):
 
 class CheckLoginRequest(BaseModel):
     token: str
+    trust: bool = False  # "Trust this device" → 30-day JWT
 
 
 class TelegramLoginRequest(BaseModel):
     code: str
+    trust: bool = False
 
 
 class AdminLoginRequest(BaseModel):
@@ -39,6 +41,7 @@ class AdminLoginRequest(BaseModel):
 class AdminVerifyRequest(BaseModel):
     email: EmailStr
     code: str
+    trust: bool = False  # "Trust this device" → 30-day JWT
 
 
 @router.post("/telegram/init")
@@ -126,10 +129,13 @@ async def check_telegram_login(data: CheckLoginRequest, db: AsyncSession = Depen
     # Consume token
     _pending_tokens.pop(data.token, None)
 
+    trust = bool(getattr(data, "trust", False))
     return LoginResponse(
-        access_token=create_access_token(user.id, user.role),
+        access_token=create_access_token(user.id, user.role, trust=trust),
         user_id=str(user.id),
         role=user.role,
+        trust=trust,
+        expires_in_days=settings.JWT_TRUST_DAYS if trust else max(1, settings.JWT_EXPIRE_MINUTES // 1440),
     )
 
 
@@ -163,10 +169,13 @@ async def telegram_login(data: TelegramLoginRequest, db: AsyncSession = Depends(
         ts.login_code = None
         ts.login_code_expires = None
         await db.commit()
+        trust = bool(getattr(data, "trust", False))
         return LoginResponse(
-            access_token=create_access_token(user.id, user.role),
+            access_token=create_access_token(user.id, user.role, trust=trust),
             user_id=str(user.id),
             role=user.role,
+            trust=trust,
+            expires_in_days=settings.JWT_TRUST_DAYS if trust else max(1, settings.JWT_EXPIRE_MINUTES // 1440),
         )
 
     if entry["expires"] < datetime.now(timezone.utc):
@@ -191,10 +200,13 @@ async def telegram_login(data: TelegramLoginRequest, db: AsyncSession = Depends(
         raise HTTPException(403, "Admin must login via email+password")
 
     _pending_tokens.pop(token, None)
+    trust = bool(getattr(data, "trust", False))
     return LoginResponse(
-        access_token=create_access_token(user.id, user.role),
+        access_token=create_access_token(user.id, user.role, trust=trust),
         user_id=str(user.id),
         role=user.role,
+        trust=trust,
+        expires_in_days=settings.JWT_TRUST_DAYS if trust else max(1, settings.JWT_EXPIRE_MINUTES // 1440),
     )
 
 
@@ -268,10 +280,13 @@ async def admin_login_step2(data: AdminVerifyRequest, db: AsyncSession = Depends
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
 
+    trust = bool(getattr(data, "trust", False))
     return LoginResponse(
-        access_token=create_access_token(user.id, user.role),
+        access_token=create_access_token(user.id, user.role, trust=trust),
         user_id=str(user.id),
         role="admin",
+        trust=trust,
+        expires_in_days=settings.JWT_TRUST_DAYS if trust else max(1, settings.JWT_EXPIRE_MINUTES // 1440),
     )
 
 

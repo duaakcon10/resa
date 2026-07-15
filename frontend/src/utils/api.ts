@@ -17,6 +17,8 @@ api.interceptors.response.use(
   err => {
     if (err.response?.status === 401) {
       localStorage.removeItem('c2_token');
+      localStorage.removeItem('c2_role');
+      localStorage.removeItem('c2_user');
       window.location.reload();
     }
     return Promise.reject(err);

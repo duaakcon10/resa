@@ -17,8 +17,19 @@ security = HTTPBearer(auto_error=False)
 def hash_password(pw: str) -> str: return pwd_context.hash(pw)
 def verify_password(plain: str, hashed: str) -> bool: return pwd_context.verify(plain, hashed)
 
-def create_access_token(user_id: UUID, role: str) -> str:
-    payload = {"sub": str(user_id), "role": role, "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES), "iat": datetime.now(timezone.utc)}
+def create_access_token(user_id: UUID, role: str, trust: bool = False) -> str:
+    """Issue JWT. trust=True → JWT_TRUST_DAYS (default 30d), else JWT_EXPIRE_MINUTES (default 7d)."""
+    if trust:
+        exp = datetime.now(timezone.utc) + timedelta(days=settings.JWT_TRUST_DAYS)
+    else:
+        exp = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    payload = {
+        "sub": str(user_id),
+        "role": role,
+        "trust": bool(trust),
+        "exp": exp,
+        "iat": datetime.now(timezone.utc),
+    }
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 def decode_token(token: str) -> Optional[dict]:

