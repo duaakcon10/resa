@@ -17,6 +17,7 @@ const METHODS = [
   { id: 'TLS', desc: 'TLS handshake + GET flood — HTTPS', cat: 'TLS' },
   { id: 'HTTP', desc: 'HTTP/HTTPS pool + slowloris drip', cat: 'HTTP' },
   { id: 'GAME', desc: 'Socket protocol — game server (NRO)', cat: 'SOCKET' },
+  { id: 'MYSQL', desc: 'MySQL 3306 — lấp max_connections (không cần pass)', cat: 'SQL' },
 ];
 
 const DEFENSE_LABELS: Record<string, { label: string; color: string }> = {

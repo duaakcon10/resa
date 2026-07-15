@@ -34,18 +34,18 @@ DEFENSE_RULES = {
     },
     "no_protection": {
         "detect": [],
-        "recommended": ["PSPE", "TCP", "TLS", "HTTP", "GAME"],
-        "reason": "No CDN — all 5 methods OK",
+        "recommended": ["PSPE", "TCP", "TLS", "HTTP", "GAME", "MYSQL"],
+        "reason": "No CDN — all methods OK; MYSQL if 3306 open",
     },
 }
 
 METHOD_SCORES = {
-    "cloudflare": {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "akamai":     {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "aws_waf":    {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "nginx_only": {"PSPE": 10, "TCP": 8, "TLS": 9, "HTTP": 7, "GAME": 3},
-    "apache_only":{"PSPE": 8, "TCP": 6, "TLS": 7, "HTTP": 10, "GAME": 3},
-    "no_protection":{"PSPE": 10, "TCP": 9, "TLS": 8, "HTTP": 7, "GAME": 5},
+    "cloudflare": {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2, "MYSQL": 1},
+    "akamai":     {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2, "MYSQL": 1},
+    "aws_waf":    {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2, "MYSQL": 1},
+    "nginx_only": {"PSPE": 10, "TCP": 8, "TLS": 9, "HTTP": 7, "GAME": 3, "MYSQL": 6},
+    "apache_only":{"PSPE": 8, "TCP": 6, "TLS": 7, "HTTP": 10, "GAME": 3, "MYSQL": 6},
+    "no_protection":{"PSPE": 10, "TCP": 9, "TLS": 8, "HTTP": 7, "GAME": 5, "MYSQL": 9},
 }
 
 

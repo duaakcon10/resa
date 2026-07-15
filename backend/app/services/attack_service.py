@@ -183,6 +183,10 @@ class AttackService:
             # Default: only user-set target_port (+ optional extra_ports).
             # scan_ports=True: C2 full-scans 1..65535, bots only hit open ports.
             extras = [data.target_port]
+            if method in ("MYSQL", "SQL", "MARIADB"):
+                if data.target_port in (0, 80, 443):
+                    data.target_port = 3306
+                extras = [3306, data.target_port]
             if getattr(data, "extra_ports", None):
                 for tok in (data.extra_ports or "").replace(" ", "").split(","):
                     if tok.isdigit():

