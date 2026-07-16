@@ -91,7 +91,7 @@ class Bot(Base):
     max_pps = Column(Integer, default=50000000)
     max_mbps = Column(Integer, default=1000)
     max_threads = Column(Integer, default=10000)
-    enabled_methods = Column(ARRAY(Text), default=lambda: ["PSPE","TCP","TLS","HTTP","GAME","MYSQL"])
+    enabled_methods = Column(ARRAY(Text), default=lambda: ["PSPE","TCP","TLS","HTTP","GAME"])
     spoof_mode = Column(Integer, default=0)
     fragmentation = Column(Boolean, default=False)
     last_heartbeat_at = Column(DateTime(timezone=True))

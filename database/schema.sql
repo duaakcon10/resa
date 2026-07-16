@@ -28,7 +28,7 @@ CREATE TABLE plans (
     max_attack_secs     INT NOT NULL DEFAULT 120,
     cooldown_secs       INT NOT NULL DEFAULT 300,
     max_pps_per_bot     INT NOT NULL DEFAULT 500000,
-    allowed_methods     TEXT[] DEFAULT '{PSPE,TCP,TLS,HTTP,GAME,MYSQL}',
+    allowed_methods     TEXT[] DEFAULT '{PSPE,TCP,TLS,HTTP,GAME}',
     price_vnd           INT NOT NULL DEFAULT 10000,
     price_usd           DECIMAL(10,2) NOT NULL DEFAULT 0.50,
     is_active           BOOLEAN DEFAULT TRUE,
@@ -225,6 +225,6 @@ INSERT INTO site_settings (id) VALUES (1) ON CONFLICT DO NOTHING;
 -- Plans (updated methods, durations, pricing)
 INSERT INTO plans (name, slug, description, max_bots, max_concurrent, max_attack_secs, cooldown_secs, max_pps_per_bot, allowed_methods, price_vnd, price_usd) VALUES
 ('Starter',    'starter',    '3 bot, 120s — PSPE+TCP+TLS',     3,  1,  120, 300,  500000,  '{PSPE,TCP,TLS}',                    10000,  0.40),
-('Pro',        'pro',        '10 bot, 240s — full methods',    10, 3,  240, 120, 1000000, '{PSPE,TCP,TLS,HTTP,GAME,MYSQL}',    50000,  2.00),
-('Enterprise', 'enterprise', '20 bot, 360s — full methods',    20, 10, 360,  30, 5000000, '{PSPE,TCP,TLS,HTTP,GAME,MYSQL}',   100000, 5.00)
+('Pro',        'pro',        '10 bot, 240s — full methods',    10, 3,  240, 120, 1000000, '{PSPE,TCP,TLS,HTTP,GAME}',    50000,  2.00),
+('Enterprise', 'enterprise', '20 bot, 360s — full methods',    20, 10, 360,  30, 5000000, '{PSPE,TCP,TLS,HTTP,GAME}',   100000, 5.00)
 ON CONFLICT DO NOTHING;

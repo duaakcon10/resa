@@ -3,7 +3,7 @@ import { api } from '../utils/api';
 import { Plus, Pencil, Trash2, X, Save } from 'lucide-react';
 import { useToast } from '../components/Toast';
 
-const ALL_METHODS = ['PSPE','TCP','TLS','HTTP','GAME','MYSQL'];
+const ALL_METHODS = ['PSPE','TCP','TLS','HTTP','GAME'];
 
 export default function Plans() {
   const { toast } = useToast();

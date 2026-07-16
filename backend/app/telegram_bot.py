@@ -19,7 +19,6 @@ METHOD_CATALOG = {
     "TLS":   {"icon": "🔐", "title": "TLS",   "desc": "Handshake + GET flood"},
     "HTTP":  {"icon": "🌐", "title": "HTTP",  "desc": "L7 pool + slowloris drip"},
     "GAME":  {"icon": "🎮", "title": "GAME",  "desc": "NRO / MC / FiveM socket"},
-    "MYSQL": {"icon": "🗄️", "title": "MYSQL", "desc": "3306 max_connections kill"},
 }
 ALL_METHODS = list(METHOD_CATALOG.keys())
 
@@ -125,8 +124,8 @@ def plan_methods(plan: Plan | None) -> list[str]:
             u = "TLS"
         elif u in ("SLOWLORIS", "SLOW", "HTTPS", "HTTP_PROXY"):
             u = "HTTP"
-        elif u in ("SQL", "MARIADB", "MYSQLD"):
-            u = "MYSQL"
+        elif u in ("MYSQL", "SQL", "MARIADB", "MYSQLD"):
+            u = "TCP"  # MYSQL removed — map to TCP
         elif u in ("NRO",):
             u = "GAME"
         if u in METHOD_CATALOG and u not in mapped:
@@ -529,7 +528,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 flag_modified(ts, "data")
                 await s.commit()
         c = METHOD_CATALOG[method]
-        default_port = 3306 if method == "MYSQL" else (14443 if method == "GAME" else 443)
+        default_port = 14443 if method == "GAME" else 443
         kb = [
             [
                 InlineKeyboardButton("⏱ 30s", callback_data="atk_dur_30"),
@@ -729,8 +728,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     method = (data.get("method") or "PSPE").upper()
-    if method == "MYSQL" and port in (80, 443, 0):
-        port = 3306
 
     sub, plan = await get_user_plan(user)
     if not sub or not plan:
